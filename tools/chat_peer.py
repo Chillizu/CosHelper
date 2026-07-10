@@ -2,17 +2,21 @@
 """Virtual chat peer for CosHelper Hotspot mode.
 
 Uses only Python stdlib plus ctypes to call the system libopus.so.0.
+Optionally supports AES-256-GCM encryption for the audio payload when a
+shared key is provided (requires the `cryptography` package).
+
 Speaks the CosHelper transport frame:
     10-byte header, little-endian:
-        frameType : int16 (always 2)
+        frameType : int16 (2 = plain Opus, 3 = AES-256-GCM encrypted)
         sequence  : int16
         timestamp : int32
         dataLen   : int16
-    followed by dataLen bytes of Opus payload
+    followed by dataLen bytes of payload (plain Opus or ciphertext+GCM tag)
 """
 
 import argparse
 import ctypes
+import hashlib
 import math
 import socket
 import struct
@@ -20,10 +24,19 @@ import sys
 import time
 
 FRAME_TYPE = 2
+ENCRYPTED_FRAME_TYPE = 3
 FRAME_SIZE = 320          # 20 ms at 16 kHz mono
 SAMPLE_RATE = 16000
 CHANNELS = 1
 OPUS_APPLICATION_AUDIO = 2049
+GCM_TAG_BITS = 128
+GCM_IV_SIZE = 12
+
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
 
 
 def _load_opus():
@@ -121,25 +134,62 @@ class OpusDecoder:
                 pass
 
 
-def build_frame(seq: int, payload: bytes) -> bytes:
+def _derive_key(key_str: str) -> bytes:
+    return hashlib.sha256(key_str.encode("utf-8")).digest()
+
+
+def _build_iv(seq: int, timestamp: int, frame_type: int) -> bytes:
+    return struct.pack("<hihi", seq, timestamp, frame_type, 0)
+
+
+def _encrypt_payload(payload: bytes, key: bytes, seq: int, timestamp: int, frame_type: int) -> bytes:
+    iv = _build_iv(seq, timestamp, frame_type)
+    cipher = Cipher(algorithms.AES(key), modes.GCM(iv))
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(payload) + encryptor.finalize()
+    return ciphertext + encryptor.tag
+
+
+def _decrypt_payload(ciphertext: bytes, key: bytes, seq: int, timestamp: int, frame_type: int) -> bytes:
+    if len(ciphertext) < 16:
+        raise ValueError("ciphertext too short for GCM tag")
+    iv = _build_iv(seq, timestamp, frame_type)
+    tag = ciphertext[-16:]
+    data = ciphertext[:-16]
+    cipher = Cipher(algorithms.AES(key), modes.GCM(iv, tag))
+    decryptor = cipher.decryptor()
+    return decryptor.update(data) + decryptor.finalize()
+
+
+def build_frame(seq: int, payload: bytes, key: bytes | None = None) -> bytes:
     """Build a CosHelper transport frame."""
     timestamp = int(time.time() * 1000) % 0x100000000
     if timestamp >= 0x80000000:
         timestamp -= 0x100000000
-    data_len = len(payload)
+    seq_signed = seq if seq < 0x8000 else seq - 0x10000
+    timestamp_signed = timestamp if timestamp < 0x80000000 else timestamp - 0x100000000
+    if key:
+        encrypted = _encrypt_payload(payload, key, seq_signed, timestamp_signed, FRAME_TYPE)
+        data_len = len(encrypted)
+        frame_type = ENCRYPTED_FRAME_TYPE
+        body = encrypted
+    else:
+        data_len = len(payload)
+        frame_type = FRAME_TYPE
+        body = payload
     if data_len > 0x7FFF:
         raise ValueError("payload too large for signed short")
     header = struct.pack(
         "<hhih",
-        FRAME_TYPE,
-        seq if seq < 0x8000 else seq - 0x10000,
-        timestamp if timestamp < 0x80000000 else timestamp - 0x100000000,
+        frame_type,
+        seq_signed,
+        timestamp_signed,
         data_len
     )
-    return header + payload
+    return header + body
 
 
-def parse_frame(data: bytes) -> tuple[int, int, int, bytes]:
+def parse_frame(data: bytes, key: bytes | None = None) -> tuple[int, int, int, bytes]:
     """Parse a transport frame. Returns (frame_type, seq, timestamp, payload)."""
     if len(data) < 10:
         raise ValueError("frame too short")
@@ -147,6 +197,9 @@ def parse_frame(data: bytes) -> tuple[int, int, int, bytes]:
     if len(data) < 10 + data_len:
         raise ValueError("incomplete frame")
     payload = data[10:10 + data_len]
+    if frame_type == ENCRYPTED_FRAME_TYPE and key:
+        payload = _decrypt_payload(payload, key, seq, timestamp, FRAME_TYPE)
+        frame_type = FRAME_TYPE
     return frame_type, seq, timestamp, payload
 
 
@@ -170,7 +223,7 @@ def generate_sine_samples() -> bytes:
     return bytes(pcm)
 
 
-def run_server(port: int, mode: str) -> None:
+def run_server(port: int, mode: str, key: bytes | None) -> None:
     """Run as TCP server on 0.0.0.0:port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -189,15 +242,14 @@ def run_server(port: int, mode: str) -> None:
                     payload = read_exact(conn, data_len)
                     received += 1
                     if received <= 5 or received % 10 == 0:
-                        print(f"[server] received frame {received} seq={seq} len={len(payload)}")
+                        print(f"[server] received frame {received} seq={seq} len={len(payload)} type={frame_type}")
                     if mode == "echo":
-                        # Echo the exact frame back (header + payload)
+                        # Echo the exact frame back (preserves encryption)
                         conn.sendall(header + payload)
                     elif mode == "canned":
-                        # Server side canned: just count and reply with a canned frame
-                        # using the same sequence number as the received frame.
+                        # Server side canned: reply with a canned frame using the same sequence number.
                         canned = get_canned_payload()
-                        conn.sendall(build_frame(seq, canned))
+                        conn.sendall(build_frame(seq, canned, key))
             except ConnectionResetError:
                 print(f"[server] connection closed, total frames received: {received}")
 
@@ -211,7 +263,7 @@ def get_canned_payload() -> bytes:
     return get_canned_payload.payload
 
 
-def run_client(host: str, port: int, mode: str) -> None:
+def run_client(host: str, port: int, mode: str, key: bytes | None) -> None:
     """Connect to a server and send/receive frames."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f"[client] connecting to {host}:{port}")
@@ -224,12 +276,9 @@ def run_client(host: str, port: int, mode: str) -> None:
 
         def sender():
             nonlocal seq, sent
-            if mode == "canned":
-                payload = get_canned_payload()
-            else:
-                payload = get_canned_payload()
+            payload = get_canned_payload()
             while True:
-                frame = build_frame(seq, payload)
+                frame = build_frame(seq, payload, key)
                 seq = (seq + 1) % 0x10000
                 s.sendall(frame)
                 sent += 1
@@ -247,8 +296,8 @@ def run_client(host: str, port: int, mode: str) -> None:
                 if received <= 5 or received % 50 == 0:
                     print(f"[client] received {received} frames")
                 if mode == "echo":
-                    # Send the received payload back (with a new sequence number)
-                    s.sendall(build_frame(seq, payload))
+                    # Echo the raw frame back (preserves encryption)
+                    s.sendall(header + payload)
 
         import threading
         threading.Thread(target=receiver, daemon=True).start()
@@ -261,17 +310,24 @@ def main():
                         help="server or client mode; echo/canned are client sub-behaviours")
     parser.add_argument("--host", default="127.0.0.1", help="server host for client mode")
     parser.add_argument("--port", type=int, default=19999, help="TCP port")
+    parser.add_argument("--key", default=None, help="shared AES-256-GCM key for encrypted audio stream")
     args = parser.parse_args()
 
+    key = None
+    if args.key:
+        if not CRYPTO_AVAILABLE:
+            print("error: --key requires the 'cryptography' package (pip install cryptography)", file=sys.stderr)
+            sys.exit(1)
+        key = _derive_key(args.key)
+
     if args.mode == "server":
-        run_server(args.port, "echo")
+        run_server(args.port, "echo", key)
     elif args.mode == "echo":
-        run_client(args.host, args.port, "echo")
+        run_client(args.host, args.port, "echo", key)
     elif args.mode == "canned":
-        run_client(args.host, args.port, "canned")
+        run_client(args.host, args.port, "canned", key)
     elif args.mode == "client":
-        # Default client behaviour: echo-style, just connect and send a canned frame
-        run_client(args.host, args.port, "canned")
+        run_client(args.host, args.port, "canned", key)
     else:
         parser.print_help()
 

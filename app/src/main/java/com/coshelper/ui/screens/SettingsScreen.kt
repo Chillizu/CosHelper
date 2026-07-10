@@ -15,15 +15,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -33,8 +38,10 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -47,10 +54,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.imePadding
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.coshelper.BuildConfig
 import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
 import com.coshelper.ui.components.AudioDevicePicker
+import com.coshelper.utils.copyModelUriToFilesDir
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,6 +83,12 @@ fun SettingsScreen() {
         ActivityResultContracts.RequestPermission()
     ) { permissionGranted = it }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     // Audio device states
     var inputDevices by remember { mutableStateOf(router.getInputDevices()) }
     var outputDevices by remember { mutableStateOf(router.getOutputDevices()) }
@@ -85,23 +102,29 @@ fun SettingsScreen() {
     // Model paths (persisted)
     var rvcModelPath by remember { mutableStateOf(settingsRepo.getRvcModelPath()) }
     var sttModelPath by remember { mutableStateOf(settingsRepo.getSttModelPath()) }
+    var hotspotKey by remember { mutableStateOf(settingsRepo.getHotspotKey()) }
+    var showHotspotKeyDialog by remember { mutableStateOf(false) }
 
     val rvcFilePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            val path = it.toString()
-            rvcModelPath = path
-            settingsRepo.setRvcModelPath(path)
+            copyModelUriToFilesDir(context, it, "rvc_model.onnx")?.let { dest ->
+                val path = dest.absolutePath
+                rvcModelPath = path
+                settingsRepo.setRvcModelPath(path)
+            }
         }
     }
     val sttFilePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            val path = it.toString()
-            sttModelPath = path
-            settingsRepo.setSttModelPath(path)
+            copyModelUriToFilesDir(context, it, "stt_model.bin")?.let { dest ->
+                val path = dest.absolutePath
+                sttModelPath = path
+                settingsRepo.setSttModelPath(path)
+            }
         }
     }
 
@@ -153,7 +176,8 @@ fun SettingsScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
             horizontalAlignment = Alignment.Start
         ) {
@@ -224,7 +248,65 @@ fun SettingsScreen() {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // ── Section 3: 权限与无障碍 ──
+            // ── Section 3: 热点与对讲 ──
+            SectionHeader(title = "热点与对讲")
+
+            ListItem(
+                modifier = Modifier.clickable { showHotspotKeyDialog = true },
+                headlineContent = { Text("热点加密密钥") },
+                supportingContent = {
+                    Text(
+                        if (hotspotKey.isNotBlank()) "已设置" else "未设置（明文传输）",
+                        color = if (hotspotKey.isNotBlank())
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.outline
+                    )
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Lock, contentDescription = null)
+                },
+                trailingContent = {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "编辑")
+                }
+            )
+
+            if (showHotspotKeyDialog) {
+                var draftKey by remember { mutableStateOf(hotspotKey) }
+                AlertDialog(
+                    onDismissRequest = { showHotspotKeyDialog = false },
+                    title = { Text("热点对讲加密密钥") },
+                    text = {
+                        OutlinedTextField(
+                            value = draftKey,
+                            onValueChange = { draftKey = it },
+                            label = { Text("共享密钥（两端需一致）") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                hotspotKey = draftKey
+                                settingsRepo.setHotspotKey(draftKey)
+                                showHotspotKeyDialog = false
+                            }
+                        ) {
+                            Text("保存")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showHotspotKeyDialog = false }) {
+                            Text("取消")
+                        }
+                    }
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // ── Section 4: 权限与无障碍 ──
             SectionHeader(title = "权限与无障碍")
 
             ListItem(
@@ -267,6 +349,14 @@ fun SettingsScreen() {
             )
 
             ListItem(
+                modifier = Modifier.toggleable(
+                    value = sttBeepEnabled,
+                    role = Role.Switch,
+                    onValueChange = { enabled ->
+                        sttBeepEnabled = enabled
+                        settingsRepo.setSttRecognitionBeep(enabled)
+                    }
+                ),
                 headlineContent = { Text("STT 识别提示音") },
                 supportingContent = { Text("开始和停止语音识别时播放提示音") },
                 leadingContent = {
@@ -275,10 +365,7 @@ fun SettingsScreen() {
                 trailingContent = {
                     Switch(
                         checked = sttBeepEnabled,
-                        onCheckedChange = { enabled ->
-                            sttBeepEnabled = enabled
-                            settingsRepo.setSttRecognitionBeep(enabled)
-                        }
+                        onCheckedChange = null
                     )
                 }
             )
@@ -303,7 +390,7 @@ fun SettingsScreen() {
 private fun SectionHeader(title: String) {
     Text(
         text = title,
-        fontSize = 22.sp,
+        style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier
             .fillMaxWidth()

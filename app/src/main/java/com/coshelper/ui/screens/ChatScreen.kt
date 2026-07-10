@@ -41,6 +41,11 @@ import com.coshelper.chat.HotspotChatManager
 import com.coshelper.data.AudioSettingsRepository
 import com.coshelper.ptt.PTTAccessibilityService
 import com.coshelper.ui.components.AudioDevicePicker
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.coshelper.ui.components.RoundedPttButton
 import com.coshelper.ui.components.StatusChip
 
@@ -84,6 +89,13 @@ fun ChatScreen() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         permissionsGranted = results.values.all { it }
+    }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permissionsGranted = permissions.all {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
     }
 
     var useHotspot by remember { mutableStateOf(false) }
@@ -133,11 +145,14 @@ fun ChatScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .imePadding()
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

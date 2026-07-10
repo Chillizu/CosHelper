@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -28,11 +29,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.coshelper.stt.SttManager
 import com.coshelper.ui.components.AudioDevicePicker
 import com.coshelper.ui.components.BottomActionBar
@@ -69,6 +75,14 @@ fun SttScreen() {
     ) { granted ->
         permissionGranted = granted
     }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    val isLoading = status.startsWith("模型加载中")
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -113,13 +127,21 @@ fun SttScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             StatusChip(
                 text = status,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             Card(
                 modifier = Modifier
@@ -132,7 +154,7 @@ fun SttScreen() {
             ) {
                 Text(
                     text = text.ifEmpty { "等待语音..." },
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -156,10 +178,10 @@ fun SttScreen() {
                 }
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
             if (!permissionGranted) {
-                androidx.compose.material3.Button(
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
                     onClick = { launcher.launch(Manifest.permission.RECORD_AUDIO) },
                     modifier = Modifier.fillMaxWidth()
                 ) {

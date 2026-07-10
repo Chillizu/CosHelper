@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.coshelper.MainActivity
@@ -18,6 +20,13 @@ import com.coshelper.data.AudioSettingsRepository
 class RvcForegroundService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val refreshWakeLock = object : Runnable {
+        override fun run() {
+            wakeLock?.takeIf { it.isHeld }?.acquire(10 * 60 * 1000L)
+            handler.postDelayed(this, REFRESH_INTERVAL_MS)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -101,11 +110,14 @@ class RvcForegroundService : Service() {
             "MioKig::RvcForegroundService"
         ).apply {
             setReferenceCounted(false)
-            acquire(10 * 60 * 1000L) // 10 minutes, refresh on next start
+            acquire(10 * 60 * 1000L) // 10 minutes, refreshed periodically
         }
+        handler.removeCallbacks(refreshWakeLock)
+        handler.postDelayed(refreshWakeLock, REFRESH_INTERVAL_MS)
     }
 
     private fun releaseWakeLock() {
+        handler.removeCallbacks(refreshWakeLock)
         wakeLock?.apply {
             if (isHeld) release()
         }
@@ -113,7 +125,8 @@ class RvcForegroundService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "rvc_service_channel"
-        private const val NOTIFICATION_ID = 2
+        private const val CHANNEL_ID = "coshelper_rvc_service"
+        private const val NOTIFICATION_ID = 1002
+        private const val REFRESH_INTERVAL_MS = 9 * 60 * 1000L
     }
 }

@@ -40,7 +40,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -145,6 +146,9 @@ val downloadWhisperModel by tasks.registering(DownloadWhisperModelTask::class) {
 
 tasks.whenTaskAdded {
     if (name == "mergeDebugAssets" || name == "mergeReleaseAssets") {
+        dependsOn(downloadWhisperModel)
+    }
+    if (name.contains("lint", ignoreCase = true)) {
         dependsOn(downloadWhisperModel)
     }
 }

@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,12 +48,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.Surface
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.coshelper.rvc.RvcForegroundService
 import com.coshelper.rvc.RvcManager
 import com.coshelper.rvc.RvcState
 import com.coshelper.ui.components.AudioDevicePicker
 import com.coshelper.ui.components.BottomActionBar
 import com.coshelper.ui.components.StatusChip
+import com.coshelper.utils.copyModelUriToFilesDir
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,16 +82,23 @@ fun RvcScreen() {
         ActivityResultContracts.RequestPermission()
     ) { permissionGranted = it }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     // Model path (read from and written to AudioSettingsRepository)
     var modelPath by remember { mutableStateOf(settingsRepo.getRvcModelPath()) }
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            val path = it.toString()
-            modelPath = path
-            settingsRepo.setRvcModelPath(path)
-            manager.loadModel(path)
+            copyModelUriToFilesDir(context, it, "rvc_model.onnx")?.let { dest ->
+                modelPath = dest.absolutePath
+                settingsRepo.setRvcModelPath(dest.absolutePath)
+                manager.loadModel(dest.absolutePath)
+            }
         }
     }
 
@@ -128,13 +141,11 @@ fun RvcScreen() {
     }
 
     // Propagate device IDs to RvcManager on change
-    DisposableEffect(inputDeviceId) {
+    LaunchedEffect(inputDeviceId) {
         manager.setInputDevice(inputDeviceId)
-        onDispose { }
     }
-    DisposableEffect(outputDeviceId) {
+    LaunchedEffect(outputDeviceId) {
         manager.setOutputDevice(outputDeviceId)
-        onDispose { }
     }
 
     // Status mapping
@@ -143,6 +154,12 @@ fun RvcScreen() {
         RvcState.Loaded -> Icons.Default.CheckCircle
         RvcState.Running -> Icons.Default.Mic
         RvcState.Error -> Icons.Default.Error
+    }
+    val statusIconDescription = when (state) {
+        RvcState.Idle -> "信息"
+        RvcState.Loaded -> "就绪"
+        RvcState.Running -> "实时变声"
+        RvcState.Error -> "错误"
     }
     val statusText = when (state) {
         RvcState.Idle -> "未加载模型"
@@ -159,13 +176,17 @@ fun RvcScreen() {
             )
         },
         bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 if (!permissionGranted) {
                     Button(
                         onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
@@ -197,18 +218,21 @@ fun RvcScreen() {
                 }
             }
         }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp)
+                .imePadding()
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Status indicator
             StatusChip(
                 icon = statusIcon,
+                iconContentDescription = statusIconDescription,
                 text = statusText,
                 modifier = Modifier.padding(top = 8.dp)
             )
@@ -217,7 +241,7 @@ fun RvcScreen() {
             ListItem(
                 headlineContent = {
                     Text(
-                        text = modelPath,
+                        text = modelPath.ifEmpty { "未选择模型" },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

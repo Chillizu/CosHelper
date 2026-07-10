@@ -138,6 +138,14 @@ fun AudioDevicePicker(
                 }
             }
         }
+        if (devices.isEmpty()) {
+            Text(
+                text = "无可用设备",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+            )
+        }
     }
 }
 

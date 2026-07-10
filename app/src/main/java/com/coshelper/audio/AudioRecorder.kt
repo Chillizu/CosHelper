@@ -1,6 +1,7 @@
 package com.coshelper.audio
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFormat
@@ -131,6 +132,7 @@ class AudioRecorder(context: Context) {
         return true
     }
 
+    @SuppressLint("MissingPermission")
     private fun buildAudioRecord(bufferSize: Int): AudioRecord? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val builder = AudioRecord.Builder()

@@ -17,6 +17,7 @@ class AudioSettingsRepository(context: Context) {
         const val KEY_STT_RECOGNITION_BEEP = "stt_recognition_beep"
     const val KEY_RVC_MODEL_PATH = "rvc_model_path"
     const val KEY_STT_MODEL_PATH = "stt_model_path"
+    const val KEY_HOTSPOT_KEY = "hotspot_key"
     }
 
     fun getInputDevice(feature: String?): Int? {
@@ -65,7 +66,7 @@ class AudioSettingsRepository(context: Context) {
     }
 
     fun getRvcModelPath(): String =
-        prefs.getString(KEY_RVC_MODEL_PATH, "/sdcard/Download/rvc_model.onnx") ?: "/sdcard/Download/rvc_model.onnx"
+        prefs.getString(KEY_RVC_MODEL_PATH, "") ?: ""
 
     fun setRvcModelPath(path: String) {
         prefs.edit().putString(KEY_RVC_MODEL_PATH, path).apply()
@@ -76,6 +77,13 @@ class AudioSettingsRepository(context: Context) {
 
     fun setSttModelPath(path: String) {
         prefs.edit().putString(KEY_STT_MODEL_PATH, path).apply()
+    }
+
+    fun getHotspotKey(): String =
+        prefs.getString(KEY_HOTSPOT_KEY, "") ?: ""
+
+    fun setHotspotKey(key: String) {
+        prefs.edit().putString(KEY_HOTSPOT_KEY, key).apply()
     }
 
     private fun getIntOrNull(key: String): Int? {

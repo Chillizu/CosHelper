@@ -16,11 +16,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun StatusChip(
     icon: ImageVector? = null,
+    iconContentDescription: String? = null,
     text: String,
     modifier: Modifier = Modifier
 ) {
     AssistChip(
         onClick = {},
+        enabled = false,
         label = {
             androidx.compose.material3.Text(
                 text = text,
@@ -32,7 +34,7 @@ fun StatusChip(
             {
                 Icon(
                     imageVector = icon,
-                    contentDescription = null,
+                    contentDescription = iconContentDescription,
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

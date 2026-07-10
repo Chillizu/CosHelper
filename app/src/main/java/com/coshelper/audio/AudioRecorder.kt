@@ -10,6 +10,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import android.os.Process
 import com.coshelper.BuildConfig
+import com.coshelper.utils.AppLogger
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +44,12 @@ class AudioRecorder(context: Context) {
 
     fun start(): Boolean = start(null)
     fun start(inputDeviceId: Int?): Boolean {
-        if (ContextCompat.checkSelfPermission(
-                appContext,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+        val permissionGranted = ContextCompat.checkSelfPermission(
+            appContext,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        AppLogger.d("AudioRecorder", "start($inputDeviceId), permissionGranted=$permissionGranted")
+        if (!permissionGranted) {
             return false
         }
         stop()
@@ -59,15 +61,20 @@ class AudioRecorder(context: Context) {
             AudioFormat.ENCODING_PCM_16BIT
         )
         if (minBufferSize <= 0) {
+            AppLogger.e("AudioRecorder", "Invalid minBufferSize: $minBufferSize")
             return false
         }
 
         // 20 ms frame = 320 samples, doubled for safety
         val bufferSize = minBufferSize.coerceAtLeast(FRAME_SIZE_IN_SAMPLES * 2 * 2)
 
-        val record = buildAudioRecord(bufferSize) ?: return false
+        val record = buildAudioRecord(bufferSize) ?: run {
+            AppLogger.e("AudioRecorder", "buildAudioRecord returned null")
+            return false
+        }
 
         if (record.state != AudioRecord.STATE_INITIALIZED) {
+            AppLogger.e("AudioRecorder", "AudioRecord not initialized (state=${record.state})")
             record.release()
             return false
         }
@@ -77,7 +84,14 @@ class AudioRecorder(context: Context) {
             val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             val device = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS)
                 .find { it.id == inputDeviceId }
-            device?.let { record.setPreferredDevice(it) }
+            if (device != null) {
+                record.setPreferredDevice(device)
+                AppLogger.d("AudioRecorder", "Resolved input device in start: [id=${device.id}, type=${AppLogger.deviceTypeName(device.type)}, name=${device.productName}]")
+            } else {
+                AppLogger.d("AudioRecorder", "Resolved input device in start: device not found for id=$inputDeviceId")
+            }
+        } else {
+            AppLogger.d("AudioRecorder", "Resolved input device in start: no override, preferredInputDeviceId=${AudioRouter.preferredInputDeviceId}")
         }
 
         audioRecord = record
@@ -153,11 +167,17 @@ class AudioRecorder(context: Context) {
                     val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
                     val device = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS)
                         .find { it.id == deviceId }
-                    device?.let { record.setPreferredDevice(it) }
-                }
+                    if (device != null) {
+                        record.setPreferredDevice(device)
+                        AppLogger.d("AudioRecorder", "buildAudioRecord resolved input device: [id=${device.id}, type=${AppLogger.deviceTypeName(device.type)}, name=${device.productName}]")
+                    } else {
+                        AppLogger.d("AudioRecorder", "buildAudioRecord preferred input device not found for id=$deviceId")
+                    }
+                } ?: AppLogger.d("AudioRecorder", "buildAudioRecord no preferred input device")
             }
             record
         } else {
+            AppLogger.d("AudioRecorder", "buildAudioRecord using legacy AudioRecord (API < M)")
             @Suppress("DEPRECATION")
             AudioRecord(
                 MediaRecorder.AudioSource.VOICE_PERFORMANCE,
@@ -170,6 +190,7 @@ class AudioRecorder(context: Context) {
     }
 
     fun stop() {
+        AppLogger.d("AudioRecorder", "stop()")
         recordingJob?.let { it.cancel() }
         recordingJob = null
         _isRecording.value = false

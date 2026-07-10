@@ -61,6 +61,7 @@ import com.coshelper.rvc.RvcState
 import com.coshelper.ui.components.AudioDevicePicker
 import com.coshelper.ui.components.BottomActionBar
 import com.coshelper.ui.components.StatusChip
+import com.coshelper.utils.AppLogger
 import com.coshelper.utils.copyModelUriToFilesDir
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,11 +123,15 @@ fun RvcScreen() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val callback = object : AudioDeviceCallback() {
             override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                val added = addedDevices?.joinToString(", ") { "id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}" }
+                AppLogger.d("RvcScreen", "onAudioDevicesAdded: count=${addedDevices?.size ?: 0}, devices=[$added]")
                 inputDevices = router.getInputDevices()
                 outputDevices = router.getOutputDevices()
             }
 
             override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                val removed = removedDevices?.joinToString(", ") { "id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}" }
+                AppLogger.d("RvcScreen", "onAudioDevicesRemoved: count=${removedDevices?.size ?: 0}, devices=[$removed]")
                 inputDevices = router.getInputDevices()
                 outputDevices = router.getOutputDevices()
                 val inputIds = inputDevices.map { it.id }

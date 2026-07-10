@@ -8,6 +8,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -47,7 +48,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +65,8 @@ import com.coshelper.BuildConfig
 import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
 import com.coshelper.ui.components.AudioDevicePicker
+import com.coshelper.utils.AppLogger
+import com.coshelper.utils.LogExporter
 import com.coshelper.utils.copyModelUriToFilesDir
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,6 +75,7 @@ fun SettingsScreen() {
     val context = LocalContext.current
     val router = remember { AudioRouter.getInstance(context) }
     val settingsRepo = remember { AudioSettingsRepository(context) }
+    val scope = rememberCoroutineScope()
 
     // Permission state
     var permissionGranted by remember {
@@ -137,10 +145,14 @@ fun SettingsScreen() {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val callback = object : AudioDeviceCallback() {
             override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                val added = addedDevices?.joinToString(", ") { "id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}" }
+                AppLogger.d("SettingsScreen", "onAudioDevicesAdded: count=${addedDevices?.size ?: 0}, devices=[$added]")
                 inputDevices = router.getInputDevices()
                 outputDevices = router.getOutputDevices()
             }
             override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                val removed = removedDevices?.joinToString(", ") { "id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}" }
+                AppLogger.d("SettingsScreen", "onAudioDevicesRemoved: count=${removedDevices?.size ?: 0}, devices=[$removed]")
                 inputDevices = router.getInputDevices()
                 outputDevices = router.getOutputDevices()
                 val inputIds = inputDevices.map { it.id }
@@ -380,6 +392,27 @@ fun SettingsScreen() {
                 supportingContent = { Text("版本 ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})") },
                 leadingContent = {
                     Icon(Icons.Default.Info, contentDescription = null)
+                }
+            )
+
+            ListItem(
+                modifier = Modifier.clickable {
+                    scope.launch(Dispatchers.IO) {
+                        val uri = LogExporter.export(context)
+                        withContext(Dispatchers.Main) {
+                            if (uri != null) {
+                                val intent = LogExporter.createShareIntent(uri)
+                                context.startActivity(Intent.createChooser(intent, "导出日志"))
+                                Toast.makeText(context, "日志已导出", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "导出日志失败", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                },
+                headlineContent = { Text("导出日志") },
+                leadingContent = {
+                    Icon(Icons.Default.FolderOpen, contentDescription = null)
                 }
             )
         }

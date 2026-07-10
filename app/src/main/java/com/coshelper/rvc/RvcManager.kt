@@ -1,0 +1,91 @@
+package com.coshelper.rvc
+
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
+import android.content.Context
+import com.coshelper.audio.AudioPlayer
+import com.coshelper.audio.AudioRecorder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+class RvcManager(context: Context) {
+    private val appContext = context.applicationContext
+    private val processor = RvcProcessor()
+    private val recorder = AudioRecorder(appContext)
+    private val player = AudioPlayer(appContext)
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private val _state = MutableStateFlow(RvcState.Idle)
+    val state: StateFlow<RvcState> = _state.asStateFlow()
+
+    private val _info = MutableStateFlow("")
+    val info: StateFlow<String> = _info.asStateFlow()
+
+    private var job: Job? = null
+
+    fun loadModel(path: String): Boolean {
+        return try {
+            processor.loadModel(path)
+            _state.value = RvcState.Loaded
+            _info.value = "模型已加载"
+            true
+        } catch (e: Exception) {
+            _state.value = RvcState.Error
+            _info.value = "加载失败: ${e.message}"
+            false
+        }
+    }
+
+    fun start() {
+        if (_state.value != RvcState.Loaded) {
+            _info.value = "请先加载模型"
+            return
+        }
+        player.setCommunicationMode(false) // media channel
+        _state.value = RvcState.Running
+        job = scope.launch {
+            recorder.setPcmCallback { pcm ->
+                val out = processor.process(pcm)
+                out?.let { player.playPcm(it) }
+            }
+            recorder.start()
+            while (isActive) {
+                delay(50)
+            }
+        }
+    }
+
+    fun stop() {
+        job?.cancel()
+        job = null
+        recorder.stop()
+        _state.value = if (_state.value == RvcState.Running) RvcState.Loaded else _state.value
+    }
+
+    fun unload() {
+        stop()
+        processor.unload()
+        _state.value = RvcState.Idle
+        _info.value = ""
+    }
+
+    fun cleanup() {
+        unload()
+        scope.cancel()
+        recorder.cleanup()
+        player.cleanup()
+    }
+}
+
+enum class RvcState {
+    Idle, Loaded, Running, Error
+}

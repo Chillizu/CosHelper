@@ -75,14 +75,16 @@ fun RvcScreen(onBack: () -> Unit) {
         ActivityResultContracts.RequestPermission()
     ) { permissionGranted = it }
 
-    // Model path with file picker
-    var modelPath by remember { mutableStateOf("/sdcard/Download/rvc_model.onnx") }
+    // Model path (read from and written to AudioSettingsRepository)
+    var modelPath by remember { mutableStateOf(settingsRepo.getRvcModelPath()) }
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            modelPath = it.toString()
-            manager.loadModel(it.toString())
+            val path = it.toString()
+            modelPath = path
+            settingsRepo.setRvcModelPath(path)
+            manager.loadModel(path)
         }
     }
 
@@ -90,16 +92,10 @@ fun RvcScreen(onBack: () -> Unit) {
     var inputDevices by remember { mutableStateOf(router.getInputDevices()) }
     var outputDevices by remember { mutableStateOf(router.getOutputDevices()) }
     var inputDeviceId by remember {
-        mutableStateOf(
-            settingsRepo.getInputDevice("rvc")
-                ?: router.getDefaultInputDevice()?.id
-        )
+        mutableStateOf(settingsRepo.getInputDevice("rvc"))
     }
     var outputDeviceId by remember {
-        mutableStateOf(
-            settingsRepo.getOutputDevice("rvc")
-                ?: router.getDefaultOutputDevice()?.id
-        )
+        mutableStateOf(settingsRepo.getOutputDevice("rvc"))
     }
 
     // Audio device callback for hotplug support
@@ -221,7 +217,7 @@ fun RvcScreen(onBack: () -> Unit) {
                 modifier = Modifier.padding(top = 8.dp)
             )
 
-            // Model path with file picker
+            // Model path with file picker and load action
             ListItem(
                 headlineContent = {
                     Text(
@@ -232,6 +228,13 @@ fun RvcScreen(onBack: () -> Unit) {
                 },
                 supportingContent = {
                     Text("模型路径", style = MaterialTheme.typography.bodySmall)
+                },
+                leadingContent = {
+                    IconButton(onClick = {
+                        manager.loadModel(modelPath)
+                    }) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = "加载模型")
+                    }
                 },
                 trailingContent = {
                     IconButton(onClick = {

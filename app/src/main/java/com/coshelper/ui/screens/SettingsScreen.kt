@@ -1,39 +1,41 @@
 package com.coshelper.ui.screens
 
 import android.Manifest
-import android.content.Intent
 import android.content.Context
+import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.provider.Settings
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +52,7 @@ import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
 import com.coshelper.ui.components.AudioDevicePicker
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -87,23 +90,26 @@ fun SettingsScreen(onBack: () -> Unit) {
         )
     }
 
-    // Model paths
-    var rvcModelPath by remember { mutableStateOf("/sdcard/Download/rvc_model.onnx") }
-    var sttModelPath by remember { mutableStateOf("") }
+    // Model paths (persisted)
+    var rvcModelPath by remember { mutableStateOf(settingsRepo.getRvcModelPath()) }
+    var sttModelPath by remember { mutableStateOf(settingsRepo.getSttModelPath()) }
+
     val rvcFilePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            rvcModelPath = uri.toString()
-            // In production, persist to SharedPreferences
+            val path = it.toString()
+            rvcModelPath = path
+            settingsRepo.setRvcModelPath(path)
         }
     }
     val sttFilePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            sttModelPath = uri.toString()
-            // In production, persist to SharedPreferences
+            val path = it.toString()
+            sttModelPath = path
+            settingsRepo.setSttModelPath(path)
         }
     }
 
@@ -139,153 +145,173 @@ fun SettingsScreen(onBack: () -> Unit) {
         onDispose { audioManager.unregisterAudioDeviceCallback(callback) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
-        horizontalAlignment = Alignment.Start
-    ) {
-        // Back button
-        Button(onClick = onBack) {
-            Text("返回", fontSize = 20.sp)
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("设置") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
         }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
+            horizontalAlignment = Alignment.Start
+        ) {
+            // ── Section 1: 音频默认 ──
+            SectionHeader(title = "音频默认")
+            AudioDevicePicker(
+                title = "默认输入设备",
+                devices = inputDevices,
+                selectedId = globalInputDeviceId.takeIf { it != -1 },
+                onSelect = { id ->
+                    globalInputDeviceId = id ?: -1
+                    settingsRepo.setInputDevice(null, id)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
 
-        // ── Section 1: 音频默认 ──
-        SectionHeader(title = "音频默认")
-        AudioDevicePicker(
-            title = "默认输入设备",
-            devices = inputDevices,
-            selectedId = globalInputDeviceId.takeIf { it != -1 },
-            onSelect = { id ->
-                globalInputDeviceId = id ?: -1
-                settingsRepo.setInputDevice(null, id)
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+            AudioDevicePicker(
+                title = "默认输出设备",
+                devices = outputDevices,
+                selectedId = globalOutputDeviceId.takeIf { it != -1 },
+                onSelect = { id ->
+                    globalOutputDeviceId = id ?: -1
+                    settingsRepo.setOutputDevice(null, id)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
 
-        AudioDevicePicker(
-            title = "默认输出设备",
-            devices = outputDevices,
-            selectedId = globalOutputDeviceId.takeIf { it != -1 },
-            onSelect = { id ->
-                globalOutputDeviceId = id ?: -1
-                settingsRepo.setOutputDevice(null, id)
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            // ── Section 2: 模型路径 ──
+            SectionHeader(title = "模型路径")
 
-        // ── Section 2: 模型路径 ──
-        SectionHeader(title = "模型路径")
-
-        OutlinedTextField(
-            value = rvcModelPath,
-            onValueChange = { rvcModelPath = it },
-            label = { Text("RVC ONNX 模型路径") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = {
-                    rvcFilePickerLauncher.launch(arrayOf("*/*"))
-                }) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = "选择文件")
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = sttModelPath,
-            onValueChange = { sttModelPath = it },
-            label = { Text("STT 模型路径") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = {
-                    sttFilePickerLauncher.launch(arrayOf("*/*"))
-                }) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = "选择文件")
-                }
-            }
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        // ── Section 3: 权限与无障碍 ──
-        SectionHeader(title = "权限与无障碍")
-
-        ListItem(
-            headlineContent = { Text("录音权限") },
-            supportingContent = {
-                Text(
-                    if (permissionGranted) "已授权" else "未授权",
-                    color = if (permissionGranted)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.error
-                )
-            },
-            leadingContent = {
-                Icon(Icons.Default.Mic, contentDescription = null)
-            },
-            trailingContent = {
-                if (!permissionGranted) {
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }) {
-                        Text("授权", fontSize = 14.sp)
+            OutlinedTextField(
+                value = rvcModelPath,
+                onValueChange = {
+                    rvcModelPath = it
+                    settingsRepo.setRvcModelPath(it)
+                },
+                label = { Text("RVC ONNX 模型路径") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = {
+                        rvcFilePickerLauncher.launch(arrayOf("*/*"))
+                    }) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = "选择文件")
                     }
                 }
-            }
-        )
+            )
 
-        ListItem(
-            headlineContent = { Text("音量键 PTT 无障碍服务") },
-            supportingContent = { Text("开启系统无障碍服务以使用音量键触发 PTT") },
-            leadingContent = {
-                Icon(Icons.Default.Security, contentDescription = null)
-            },
-            trailingContent = {
-                Button(onClick = {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    context.startActivity(intent)
-                }) {
-                    Text("设置", fontSize = 14.sp)
-                }
-            }
-        )
-
-        ListItem(
-            headlineContent = { Text("STT 识别提示音") },
-            supportingContent = { Text("开始和停止语音识别时播放提示音") },
-            leadingContent = {
-                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null)
-            },
-            trailingContent = {
-                Switch(
-                    checked = sttBeepEnabled,
-                    onCheckedChange = { enabled ->
-                        sttBeepEnabled = enabled
-                        settingsRepo.setSttRecognitionBeep(enabled)
+            OutlinedTextField(
+                value = sttModelPath,
+                onValueChange = {
+                    sttModelPath = it
+                    settingsRepo.setSttModelPath(it)
+                },
+                label = { Text("STT 模型路径") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = {
+                        sttFilePickerLauncher.launch(arrayOf("*/*"))
+                    }) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = "选择文件")
                     }
-                )
-            }
-        )
+                }
+            )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-        // ── Section 4: 关于 ──
-        SectionHeader(title = "关于")
+            // ── Section 3: 权限与无障碍 ──
+            SectionHeader(title = "权限与无障碍")
 
-        ListItem(
-            headlineContent = { Text("CosHelper") },
-            supportingContent = { Text("版本 ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})") },
-            leadingContent = {
-                Icon(Icons.Default.Info, contentDescription = null)
-            }
-        )
+            ListItem(
+                headlineContent = { Text("录音权限") },
+                supportingContent = {
+                    Text(
+                        if (permissionGranted) "已授权" else "未授权",
+                        color = if (permissionGranted)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
+                    )
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Mic, contentDescription = null)
+                },
+                trailingContent = {
+                    if (!permissionGranted) {
+                        IconButton(onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = "授权")
+                        }
+                    }
+                }
+            )
+
+            ListItem(
+                headlineContent = { Text("音量键 PTT 无障碍服务") },
+                supportingContent = { Text("开启系统无障碍服务以使用音量键触发 PTT") },
+                leadingContent = {
+                    Icon(Icons.Default.Security, contentDescription = null)
+                },
+                trailingContent = {
+                    IconButton(onClick = {
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        context.startActivity(intent)
+                    }) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = "设置")
+                    }
+                }
+            )
+
+            ListItem(
+                headlineContent = { Text("STT 识别提示音") },
+                supportingContent = { Text("开始和停止语音识别时播放提示音") },
+                leadingContent = {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null)
+                },
+                trailingContent = {
+                    Switch(
+                        checked = sttBeepEnabled,
+                        onCheckedChange = { enabled ->
+                            sttBeepEnabled = enabled
+                            settingsRepo.setSttRecognitionBeep(enabled)
+                        }
+                    )
+                }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // ── Section 4: 关于 ──
+            SectionHeader(title = "关于")
+
+            ListItem(
+                headlineContent = { Text("CosHelper") },
+                supportingContent = { Text("版本 ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})") },
+                leadingContent = {
+                    Icon(Icons.Default.Info, contentDescription = null)
+                }
+            )
+        }
     }
 }
 

@@ -13,7 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -68,8 +69,8 @@ fun AudioDevicePicker(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = if (isDefaultSelected) "已选择" else null,
+                    imageVector = if (isDefaultSelected) Icons.Default.RadioButtonChecked else Icons.Outlined.RadioButtonUnchecked,
+                    contentDescription = if (isDefaultSelected) "已选择" else "未选择",
                     modifier = Modifier.size(20.dp),
                     tint = if (isDefaultSelected) {
                         MaterialTheme.colorScheme.onSecondaryContainer
@@ -115,8 +116,8 @@ fun AudioDevicePicker(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = if (isSelected) "已选择" else null,
+                        imageVector = if (isSelected) Icons.Default.RadioButtonChecked else Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = if (isSelected) "已选择" else "未选择",
                         modifier = Modifier.size(20.dp),
                         tint = if (isSelected) {
                             MaterialTheme.colorScheme.onPrimaryContainer

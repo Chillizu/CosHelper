@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+    import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
@@ -76,18 +77,10 @@ fun SettingsScreen(onBack: () -> Unit) {
     var inputDevices by remember { mutableStateOf(router.getInputDevices()) }
     var outputDevices by remember { mutableStateOf(router.getOutputDevices()) }
     var globalInputDeviceId by remember {
-        mutableStateOf(
-            settingsRepo.getInputDevice(null)
-                ?: router.getDefaultInputDevice()?.id
-                ?: -1
-        )
+        mutableStateOf(settingsRepo.getInputDevice(null))
     }
     var globalOutputDeviceId by remember {
-        mutableStateOf(
-            settingsRepo.getOutputDevice(null)
-                ?: router.getDefaultOutputDevice()?.id
-                ?: -1
-        )
+        mutableStateOf(settingsRepo.getOutputDevice(null))
     }
 
     // Model paths (persisted)
@@ -131,13 +124,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                 outputDevices = router.getOutputDevices()
                 val inputIds = inputDevices.map { it.id }
                 val outputIds = outputDevices.map { it.id }
-                if (globalInputDeviceId != -1 && globalInputDeviceId !in inputIds) {
-                    globalInputDeviceId = router.getDefaultInputDevice()?.id ?: -1
-                    settingsRepo.setInputDevice(null, globalInputDeviceId)
+                if (globalInputDeviceId != null && globalInputDeviceId !in inputIds) {
+                    globalInputDeviceId = null
+                    settingsRepo.resetInputDevice(null)
                 }
-                if (globalOutputDeviceId != -1 && globalOutputDeviceId !in outputIds) {
-                    globalOutputDeviceId = router.getDefaultOutputDevice()?.id ?: -1
-                    settingsRepo.setOutputDevice(null, globalOutputDeviceId)
+                if (globalOutputDeviceId != null && globalOutputDeviceId !in outputIds) {
+                    globalOutputDeviceId = null
+                    settingsRepo.resetOutputDevice(null)
                 }
             }
         }
@@ -178,9 +171,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             AudioDevicePicker(
                 title = "默认输入设备",
                 devices = inputDevices,
-                selectedId = globalInputDeviceId.takeIf { it != -1 },
+                selectedId = globalInputDeviceId,
                 onSelect = { id ->
-                    globalInputDeviceId = id ?: -1
+                    globalInputDeviceId = id
                     settingsRepo.setInputDevice(null, id)
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -189,9 +182,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             AudioDevicePicker(
                 title = "默认输出设备",
                 devices = outputDevices,
-                selectedId = globalOutputDeviceId.takeIf { it != -1 },
+                selectedId = globalOutputDeviceId,
                 onSelect = { id ->
-                    globalOutputDeviceId = id ?: -1
+                    globalOutputDeviceId = id
                     settingsRepo.setOutputDevice(null, id)
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -260,7 +253,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 trailingContent = {
                     if (!permissionGranted) {
                         IconButton(onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }) {
-                            Icon(Icons.Default.FolderOpen, contentDescription = "授权")
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "授权")
                         }
                     }
                 }
@@ -277,7 +270,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                         context.startActivity(intent)
                     }) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = "设置")
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "设置")
                     }
                 }
             )
@@ -305,7 +298,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             SectionHeader(title = "关于")
 
             ListItem(
-                headlineContent = { Text("CosHelper") },
+                headlineContent = { Text("MioKig") },
                 supportingContent = { Text("版本 ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})") },
                 leadingContent = {
                     Icon(Icons.Default.Info, contentDescription = null)

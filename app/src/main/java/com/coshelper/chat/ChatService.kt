@@ -57,7 +57,7 @@ class ChatService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "CosHelper 对讲服务",
+                "MioKig 对讲服务",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "保持对讲后台连接"
@@ -79,7 +79,7 @@ class ChatService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("CosHelper 对讲中")
+            .setContentTitle("MioKig 对讲中")
             .setContentText("正在寻找附近设备并等待对讲")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(pendingIntent)
@@ -89,7 +89,7 @@ class ChatService : Service() {
 
     private fun acquireWakeLock() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CosHelper::ChatService").apply {
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MioKig::ChatService").apply {
             setReferenceCounted(false)
             acquire(10 * 60 * 1000L) // 10 minutes, refresh periodically
         }

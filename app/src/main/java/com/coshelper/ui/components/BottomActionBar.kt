@@ -1,6 +1,7 @@
 package com.coshelper.ui.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -30,6 +31,7 @@ fun BottomActionBar(
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 56.dp)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
@@ -41,7 +43,7 @@ fun BottomActionBar(
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleLarge
             )
         }
     }

@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -176,8 +177,11 @@ fun ChatScreen(onBack: () -> Unit) {
                 StatusChip(text = displayStatus)
 
                 if (!permissionsGranted) {
-                    Button(onClick = { permissionLauncher.launch(permissions.toTypedArray()) }) {
-                        Text("授权权限")
+                    Button(
+                        onClick = { permissionLauncher.launch(permissions.toTypedArray()) },
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                    ) {
+                        Text("授权权限", style = MaterialTheme.typography.titleMedium)
                     }
                 }
 
@@ -186,29 +190,44 @@ fun ChatScreen(onBack: () -> Unit) {
                         // Nearby connection controls
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (state == ChatState.Idle) {
-                                OutlinedButton(onClick = { viewModel.startChat() }) {
-                                    Text("开始连接")
+                                OutlinedButton(
+                                    onClick = { viewModel.startChat() },
+                                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                                ) {
+                                    Text("开始连接", style = MaterialTheme.typography.titleMedium)
                                 }
                             } else {
-                                OutlinedButton(onClick = { viewModel.stopChat() }) {
-                                    Text("停止")
+                                OutlinedButton(
+                                    onClick = { viewModel.stopChat() },
+                                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                                ) {
+                                    Text("停止", style = MaterialTheme.typography.titleMedium)
                                 }
                             }
                         }
                     } else {
                         // Hotspot connection controls
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { hotspotManager.startServer() }) {
-                                Text("我开热点")
+                            OutlinedButton(
+                                onClick = { hotspotManager.startServer() },
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+                            ) {
+                                Text("我开热点", style = MaterialTheme.typography.titleMedium)
                             }
-                            OutlinedButton(onClick = { hotspotManager.startClient() }) {
-                                Text("我连接热点")
+                            OutlinedButton(
+                                onClick = { hotspotManager.startClient() },
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+                            ) {
+                                Text("我连接热点", style = MaterialTheme.typography.titleMedium)
                             }
-                            Button(onClick = {
-                                hotspotManager.setFallbackHost("10.0.2.2")
-                                hotspotManager.startClient()
-                            }) {
-                                Text("连接测试对端")
+                            Button(
+                                onClick = {
+                                    hotspotManager.setFallbackHost("10.0.2.2")
+                                    hotspotManager.startClient()
+                                },
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+                            ) {
+                                Text("连接测试对端", style = MaterialTheme.typography.titleMedium)
                             }
                         }
                     }

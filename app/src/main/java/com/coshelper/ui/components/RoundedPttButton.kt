@@ -25,8 +25,8 @@ fun RoundedPttButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp),
-        shape = RoundedCornerShape(24.dp),
+            .height(72.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (active) {
                 MaterialTheme.colorScheme.tertiary
@@ -44,7 +44,7 @@ fun RoundedPttButton(
     ) {
         Text(
             text = if (active) activeText else inactiveText,
-            style = MaterialTheme.typography.titleMedium
+            style = MaterialTheme.typography.titleLarge
         )
     }
 }

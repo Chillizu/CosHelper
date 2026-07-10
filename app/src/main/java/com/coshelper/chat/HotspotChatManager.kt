@@ -73,7 +73,7 @@ class HotspotChatManager(context: Context) {
     private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
 
     private val serviceType = "_coshelper._tcp"
-    private val serviceName = "CosHelper"
+    private val serviceName = "MioKig"
     private val port = 19999
     private var fallbackHost = "192.168.43.1"
 

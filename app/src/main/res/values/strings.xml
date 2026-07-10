@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CosHelper</string>
+    <string name="app_name">MioKig</string>
     <string name="ptt">对讲</string>
     <string name="stt">语音转文字</string>
     <string name="rvc">变声器</string>

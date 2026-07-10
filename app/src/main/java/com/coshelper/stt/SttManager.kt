@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.coshelper.audio.AudioRecorder
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +44,17 @@ class SttManager(context: Context) {
 
     private var modelLoaded = false
 
+
+    private var inputDeviceId: Int? = null
+    private var recognitionBeepEnabled = false
+
+    fun setInputDevice(deviceId: Int?) {
+        inputDeviceId = deviceId
+    }
+
+    fun setRecognitionBeep(enabled: Boolean) {
+        recognitionBeepEnabled = enabled
+    }
     private val modelFileName = "ggml-base-q5_1.bin"
     private val assetPath = "models/$modelFileName"
 
@@ -101,13 +115,14 @@ class SttManager(context: Context) {
         sampleBuffer.clear()
         _isRecording.value = true
         _status.value = "正在听…"
+        playBeep()
 
         recorder.setPcmCallback { pcm ->
             synchronized(sampleBuffer) {
                 pcm.forEach { sampleBuffer.add(it / 32768.0f) }
             }
         }
-        recorder.start()
+        recorder.start(inputDeviceId)
 
         recordingJob = scope.launch {
             while (isActive) {
@@ -130,12 +145,51 @@ class SttManager(context: Context) {
         return true
     }
 
+    private fun playBeep() {
+        if (!recognitionBeepEnabled) return
+        scope.launch {
+            val sampleRate = 16000
+            val durationMs = 100
+            val numSamples = sampleRate * durationMs / 1000
+            val buffer = ShortArray(numSamples)
+            for (i in 0 until numSamples) {
+                val sample = (kotlin.math.sin(2.0 * kotlin.math.PI * 1000.0 * i / sampleRate) * 8000).toInt()
+                buffer[i] = sample.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+            val minBufferSize = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .build()
+                )
+                .setBufferSizeInBytes(minBufferSize.coerceAtLeast(numSamples * 2))
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            track.write(buffer, 0, buffer.size)
+            track.play()
+        }
+    }
+
     fun stop() {
         recordingJob?.cancel()
         recordingJob = null
         recorder.stop()
         _isRecording.value = false
         _status.value = "已停止"
+        playBeep()
     }
 
     fun cleanup() {

@@ -58,6 +58,12 @@ class NearbyChatManager(context: Context) {
     @Volatile
     private var isPttActive = false
 
+    private var inputDeviceId: Int? = null
+
+    fun setInputDevice(deviceId: Int?) {
+        inputDeviceId = deviceId
+    }
+
     private val serviceId = "com.coshelper.audio.v1"
 
     private val strategy = Strategy.P2P_POINT_TO_POINT
@@ -194,7 +200,7 @@ class NearbyChatManager(context: Context) {
                 frame?.let { sendToAll(it) }
             }
         }
-        recorder.start()
+        recorder.start(inputDeviceId)
     }
 
     fun stopPtt() {

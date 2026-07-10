@@ -62,6 +62,12 @@ class HotspotChatManager(context: Context) {
     private val isPttActive = AtomicBoolean(false)
     private var isServer = false
 
+    private var inputDeviceId: Int? = null
+
+    fun setInputDevice(deviceId: Int?) {
+        inputDeviceId = deviceId
+    }
+
     private val nsdManager = appContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
     private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
@@ -286,7 +292,7 @@ class HotspotChatManager(context: Context) {
                 frame?.let { sendToAll(it) }
             }
         }
-        recorder.start()
+        recorder.start(inputDeviceId)
     }
 
     fun stopPtt() {

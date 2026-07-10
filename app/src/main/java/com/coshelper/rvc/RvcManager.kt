@@ -32,6 +32,17 @@ class RvcManager(context: Context) {
 
     private var job: Job? = null
 
+    private var inputDeviceId: Int? = null
+    private var outputDeviceId: Int? = null
+
+    fun setInputDevice(deviceId: Int?) {
+        inputDeviceId = deviceId
+    }
+
+    fun setOutputDevice(deviceId: Int?) {
+        outputDeviceId = deviceId
+    }
+
     fun loadModel(path: String): Boolean {
         return try {
             processor.loadModel(path)
@@ -51,13 +62,14 @@ class RvcManager(context: Context) {
             return
         }
         player.setCommunicationMode(false) // media channel
+        player.setPreferredOutputDevice(outputDeviceId)
         _state.value = RvcState.Running
         job = scope.launch {
             recorder.setPcmCallback { pcm ->
                 val out = processor.process(pcm)
                 out?.let { player.playPcm(it) }
             }
-            recorder.start()
+            recorder.start(inputDeviceId)
             while (isActive) {
                 delay(50)
             }

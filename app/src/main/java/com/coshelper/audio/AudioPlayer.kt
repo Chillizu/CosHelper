@@ -16,6 +16,7 @@ class AudioPlayer(context: Context) {
     val isPlaying: StateFlow<Boolean> = _isPlaying
 
     private var isCommunicationMode = true
+    private var preferredOutputDeviceId: Int? = null
     private val lock = Any()
 
     init {
@@ -27,6 +28,15 @@ class AudioPlayer(context: Context) {
         isCommunicationMode = isCommunication
         rebuildTrack()
     }
+
+    fun setPreferredOutputDevice(deviceId: Int?) {
+        synchronized(lock) {
+            if (preferredOutputDeviceId == deviceId) return
+            preferredOutputDeviceId = deviceId
+            rebuildTrack()
+        }
+    }
+
 
     private fun rebuildTrack() {
         synchronized(lock) {
@@ -65,10 +75,12 @@ class AudioPlayer(context: Context) {
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                AudioRouter.preferredOutputDeviceId?.let { deviceId ->
+                val deviceId = preferredOutputDeviceId
+                    ?: AudioRouter.preferredOutputDeviceId
+                deviceId?.let { id ->
                     val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val device = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                        .find { it.id == deviceId }
+                        .find { it.id == id }
                     device?.let { track.setPreferredDevice(it) }
                 }
             }

@@ -40,7 +40,8 @@ class AudioRecorder(context: Context) {
         onPcmCallback = callback
     }
 
-    fun start(): Boolean {
+    fun start(): Boolean = start(null)
+    fun start(inputDeviceId: Int?): Boolean {
         if (ContextCompat.checkSelfPermission(
                 appContext,
                 Manifest.permission.RECORD_AUDIO
@@ -68,6 +69,14 @@ class AudioRecorder(context: Context) {
         if (record.state != AudioRecord.STATE_INITIALIZED) {
             record.release()
             return false
+        }
+
+        // Per-feature input device override takes precedence over global default
+        if (inputDeviceId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val device = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS)
+                .find { it.id == inputDeviceId }
+            device?.let { record.setPreferredDevice(it) }
         }
 
         audioRecord = record

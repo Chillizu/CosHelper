@@ -24,6 +24,14 @@ class AudioRouter private constructor(context: Context) {
             preferredOutputDeviceId = deviceId
         }
 
+        fun resetInputDevice() {
+            preferredInputDeviceId = null
+        }
+
+        fun resetOutputDevice() {
+            preferredOutputDeviceId = null
+        }
+
         @JvmStatic
         private var instance: AudioRouter? = null
 

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -67,6 +68,7 @@ class HotspotChatManager(
 
     private var serverSocket: ServerSocket? = null
     private val clientSockets = ConcurrentHashMap<String, Socket>()
+    private val connectMutex = Mutex()
     private val isPttActive = AtomicBoolean(false)
     private var isServer = false
 
@@ -137,10 +139,11 @@ class HotspotChatManager(
     }
 
     private fun connectClient(host: String, port: Int) {
-        if (_state.value !is HotspotState.ClientSearching) return
-        _status.value = "正在连接 $host:$port…"
         scope.launch {
+            if (!connectMutex.tryLock()) return@launch
             try {
+                if (_state.value !is HotspotState.ClientSearching) return@launch
+                _status.value = "正在连接 $host:$port…"
                 val socket = Socket()
                 socket.connect(InetSocketAddress(host, port), 5000)
                 val id = socket.inetAddress.hostAddress ?: host
@@ -148,11 +151,16 @@ class HotspotChatManager(
                 _state.value = HotspotState.ClientConnected(id)
                 _events.tryEmit(HotspotEvent.ConnectedToServer(id))
                 _status.value = "已连接"
+                fallbackJob?.cancel()
+                fallbackJob = null
+                nsdDiscoveryListener?.let { nsdManager.stopServiceDiscovery(it); nsdDiscoveryListener = null }
                 handleSocket(socket, id)
             } catch (e: IOException) {
                 _events.tryEmit(HotspotEvent.Error("Connect failed: ${e.message}"))
                 _status.value = "连接失败: ${e.message}"
                 _state.value = HotspotState.Idle
+            } finally {
+                connectMutex.unlock()
             }
         }
     }
@@ -170,7 +178,7 @@ class HotspotChatManager(
                     read += r
                 }
                 val h = parseHeader(header)
-                if (h.dataLen > 4096) continue
+                if (h.dataLen > 4096) throw IOException("frame too large: ${h.dataLen}")
                 val payload = ByteArray(h.dataLen)
                 var pr = 0
                 while (pr < h.dataLen) {
@@ -311,10 +319,12 @@ class HotspotChatManager(
 
     private fun sendToAll(data: ByteArray) {
         val encrypted = maybeEncryptFrame(data)
-        clientSockets.values.forEach { socket ->
+        clientSockets.toMap().forEach { (id, socket) ->
             try {
                 socket.getOutputStream().write(encrypted)
             } catch (e: IOException) {
+                try { socket.close() } catch (_: Throwable) {}
+                clientSockets.remove(id)
                 _events.tryEmit(HotspotEvent.Error("Send failed: ${e.message}"))
             }
         }

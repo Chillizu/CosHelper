@@ -18,6 +18,7 @@ class OpusCodec private constructor() {
      *   8-9: dataLen (short, opus payload length)
      *   10+: opus payload
      */
+    @Synchronized
     fun encode(pcm: ShortArray): ByteArray? {
         if (pcm.isEmpty()) return null
         val maxBytes = (pcm.size * 2).coerceAtLeast(160)
@@ -38,6 +39,7 @@ class OpusCodec private constructor() {
     /**
      * Decodes a transport packet back into PCM.
      */
+    @Synchronized
     fun decode(frame: ByteArray): ShortArray? {
         if (frame.size < 10) return null
         val buf = ByteBuffer.wrap(frame).order(ByteOrder.LITTLE_ENDIAN)

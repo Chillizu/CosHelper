@@ -19,7 +19,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import java.io.File
+import android.util.Log
 
 class SttManager(context: Context) {
     private val appContext = context.applicationContext
@@ -48,6 +53,7 @@ class SttManager(context: Context) {
     private var bufferHead = 0
 
     private var modelLoaded = false
+    private val modelMutex = Mutex()
 
     private var inputDeviceId: Int? = null
     private var recognitionBeepEnabled = false
@@ -132,8 +138,11 @@ class SttManager(context: Context) {
                 delay(300)
                 val current = takeTranscriptionWindow()
                 current?.let { samples ->
-                    val result = whisperJNI.transcribe(samples, samples.size, "zh")
-                    _text.value = result
+                    modelMutex.withLock {
+                        if (!isActive) return@withLock
+                        val result = whisperJNI.transcribe(samples, samples.size, "zh")
+                        _text.value = result
+                    }
                 }
             }
         }
@@ -224,14 +233,26 @@ class SttManager(context: Context) {
 
     fun cleanup() {
         stop()
-        whisperJNI.freeModel()
-        modelLoaded = false
-        _isModelLoaded.value = false
+        runBlocking {
+            try {
+                withTimeout(3000L) {
+                    modelMutex.withLock {
+                        whisperJNI.freeModel()
+                    }
+                }
+                modelLoaded = false
+                _isModelLoaded.value = false
+            } catch (e: Exception) {
+                Log.w(TAG, "Whisper model still in use during cleanup; skipping freeModel to avoid crash", e)
+            }
+        }
         scope.cancel()
         recorder.cleanup()
     }
 
     companion object {
+        private const val TAG = "SttManager"
+
         // 16 kHz / 20 ms Opus frame = 320 samples per callback.
         // Transcription window: 6 frames * 320 = 1920 samples? Wait, original code used 4800,
         // which corresponds to a 300-sample window in the native audio path? Keep the same

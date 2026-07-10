@@ -44,6 +44,7 @@ import com.coshelper.ui.components.AudioDevicePicker
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.coshelper.ui.components.RoundedPttButton
@@ -210,27 +211,48 @@ fun ChatScreen() {
                         }
                     } else {
                         // Hotspot connection controls
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             OutlinedButton(
                                 onClick = { hotspotManager.startServer() },
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)
                             ) {
-                                Text("我开热点", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "我开热点",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                             }
                             OutlinedButton(
                                 onClick = { hotspotManager.startClient() },
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)
                             ) {
-                                Text("我连接热点", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "我连接热点",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                             }
                             Button(
                                 onClick = {
                                     hotspotManager.setFallbackHost("10.0.2.2")
                                     hotspotManager.startClient()
                                 },
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)
                             ) {
-                                Text("连接测试对端", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "连接测试对端",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                             }
                         }
                     }

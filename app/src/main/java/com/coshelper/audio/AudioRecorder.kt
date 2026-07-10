@@ -172,11 +172,6 @@ class AudioRecorder(context: Context) {
     fun stop() {
         recordingJob?.let { it.cancel() }
         recordingJob = null
-        audioRecord?.apply {
-            try { stop() } catch (_: IllegalStateException) {}
-            release()
-        }
-        audioRecord = null
         _isRecording.value = false
     }
 

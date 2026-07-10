@@ -66,7 +66,7 @@ class RvcForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        RvcManager.getInstance(this).stop()
+        RvcManager.getInstance(this).cleanup()
         releaseWakeLock()
         super.onDestroy()
     }

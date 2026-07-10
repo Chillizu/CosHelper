@@ -40,7 +40,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -70,6 +73,8 @@ fun RvcScreen() {
     val router = remember { AudioRouter.getInstance(context) }
     val settingsRepo = remember { AudioSettingsRepository(context) }
 
+    val scope = rememberCoroutineScope()
+
     var permissionGranted by remember {
         mutableStateOf(
             androidx.core.content.ContextCompat.checkSelfPermission(
@@ -97,7 +102,7 @@ fun RvcScreen() {
             copyModelUriToFilesDir(context, it, "rvc_model.onnx")?.let { dest ->
                 modelPath = dest.absolutePath
                 settingsRepo.setRvcModelPath(dest.absolutePath)
-                manager.loadModel(dest.absolutePath)
+                scope.launch(Dispatchers.IO) { manager.loadModel(dest.absolutePath) }
             }
         }
     }

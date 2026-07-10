@@ -35,6 +35,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun stopChat() = manager.stop()
     fun pressPtt() = manager.startPtt()
     fun releasePtt() = manager.stopPtt()
+    fun setInputDevice(deviceId: Int?) = manager.setInputDevice(deviceId)
 
     override fun onCleared() {
         super.onCleared()

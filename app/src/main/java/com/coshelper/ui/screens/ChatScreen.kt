@@ -4,19 +4,27 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -28,13 +36,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.coshelper.audio.AudioRouter
 import com.coshelper.chat.ChatState
 import com.coshelper.chat.ChatViewModel
 import com.coshelper.chat.HotspotChatManager
+import com.coshelper.data.AudioSettingsRepository
 import com.coshelper.ptt.PTTAccessibilityService
+import com.coshelper.ui.components.AudioDevicePicker
+import com.coshelper.ui.components.RoundedPttButton
+import com.coshelper.ui.components.StatusChip
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -82,6 +95,13 @@ fun ChatScreen(onBack: () -> Unit) {
     val hotspotStatus by hotspotManager.status.collectAsState()
     val displayStatus = if (useHotspot) hotspotStatus else status
 
+    val audioRouter = remember { AudioRouter.getInstance(context) }
+    val audioSettingsRepo = remember { AudioSettingsRepository(context) }
+    val inputDevices = remember { audioRouter.getInputDevices() }
+    var selectedInputDeviceId by remember {
+        mutableStateOf(audioSettingsRepo.getInputDevice("chat"))
+    }
+
     DisposableEffect(useHotspot) {
         PTTAccessibilityService.setCallbacks(
             press = {
@@ -100,70 +120,119 @@ fun ChatScreen(onBack: () -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Button(onClick = onBack) {
-                Text("返回", fontSize = 20.sp)
-            }
-            Button(onClick = { useHotspot = !useHotspot }) {
-                Text(if (useHotspot) "热点模式" else "Nearby模式", fontSize = 20.sp)
-            }
-        }
-
-        Text(
-            text = displayStatus,
-            fontSize = 28.sp,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        if (!permissionsGranted) {
-            Button(onClick = { permissionLauncher.launch(permissions.toTypedArray()) }) {
-                Text("授权权限", fontSize = 24.sp)
-            }
-        } else {
-            if (state == ChatState.Idle && !useHotspot) {
-                Button(onClick = { viewModel.startChat() }) {
-                    Text("开始连接", fontSize = 24.sp)
-                }
-            }
-            if (useHotspot) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { hotspotManager.startServer() }) {
-                        Text("我开热点", fontSize = 18.sp)
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("对讲") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回"
+                        )
                     }
-                    Button(onClick = { hotspotManager.startClient() }) {
-                        Text("我连接热点", fontSize = 18.sp)
-                    }
-                    Button(onClick = {
-                        hotspotManager.setFallbackHost("10.0.2.2")
-                        hotspotManager.startClient()
-                    }) {
-                        Text("连接测试对端", fontSize = 18.sp)
-                    }
-                }
-            }
-        }
-
-        val isPtt = if (useHotspot) isHotspotPtt else state is ChatState.Sending
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(32.dp)
-                .background(
-                    color = if (isPtt) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
-                .clickable {
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Mode segmented button: Nearby / Hotspot
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    SegmentedButton(
+                        selected = !useHotspot,
+                        onClick = { useHotspot = false },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                    ) {
+                        Text("Nearby")
+                    }
+                    SegmentedButton(
+                        selected = useHotspot,
+                        onClick = { useHotspot = true },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                    ) {
+                        Text("热点模式")
+                    }
+                }
+
+                // Status chip
+                StatusChip(text = displayStatus)
+
+                if (!permissionsGranted) {
+                    Button(onClick = { permissionLauncher.launch(permissions.toTypedArray()) }) {
+                        Text("授权权限")
+                    }
+                }
+
+                if (permissionsGranted) {
+                    if (!useHotspot) {
+                        // Nearby connection controls
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (state == ChatState.Idle) {
+                                OutlinedButton(onClick = { viewModel.startChat() }) {
+                                    Text("开始连接")
+                                }
+                            } else {
+                                OutlinedButton(onClick = { viewModel.stopChat() }) {
+                                    Text("停止")
+                                }
+                            }
+                        }
+                    } else {
+                        // Hotspot connection controls
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { hotspotManager.startServer() }) {
+                                Text("我开热点")
+                            }
+                            OutlinedButton(onClick = { hotspotManager.startClient() }) {
+                                Text("我连接热点")
+                            }
+                            Button(onClick = {
+                                hotspotManager.setFallbackHost("10.0.2.2")
+                                hotspotManager.startClient()
+                            }) {
+                                Text("连接测试对端")
+                            }
+                        }
+                    }
+                }
+
+                // Per-feature audio input device picker
+                AudioDevicePicker(
+                    title = "音频输入设备",
+                    devices = inputDevices,
+                    selectedId = selectedInputDeviceId,
+                    onSelect = { deviceId ->
+                        selectedInputDeviceId = deviceId
+                        audioSettingsRepo.setInputDevice("chat", deviceId)
+                        viewModel.setInputDevice(deviceId)
+                        hotspotManager.setInputDevice(deviceId)
+                    }
+                )
+            }
+
+            // Rounded PTT button
+            val isPtt = if (useHotspot) isHotspotPtt else state is ChatState.Sending
+            RoundedPttButton(
+                active = isPtt,
+                onClick = {
                     if (permissionsGranted) {
                         if (useHotspot) {
                             if (isHotspotPtt) {
@@ -182,12 +251,7 @@ fun ChatScreen(onBack: () -> Unit) {
                         }
                     }
                 },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = if (isPtt) "说话中" else "按住说话",
-                fontSize = 48.sp,
-                color = if (isPtt) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                modifier = Modifier.padding(vertical = 16.dp)
             )
         }
     }

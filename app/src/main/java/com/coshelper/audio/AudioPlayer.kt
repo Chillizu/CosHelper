@@ -8,6 +8,7 @@ import android.media.AudioTrack
 import android.os.Build
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.coshelper.utils.AppLogger
 
 class AudioPlayer(context: Context) {
     private val appContext = context.applicationContext
@@ -81,13 +82,19 @@ class AudioPlayer(context: Context) {
                     val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val device = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
                         .find { it.id == id }
-                    device?.let { track.setPreferredDevice(it) }
-                }
+                    if (device != null) {
+                        track.setPreferredDevice(device)
+                        AppLogger.d("AudioPlayer", "rebuildTrack resolved output device: [id=${device.id}, type=${AppLogger.deviceTypeName(device.type)}, name=${device.productName}]")
+                    } else {
+                        AppLogger.d("AudioPlayer", "rebuildTrack preferred output device not found for id=$id")
+                    }
+                } ?: AppLogger.d("AudioPlayer", "rebuildTrack no preferred output device")
             }
 
             try {
                 track.play()
-            } catch (_: IllegalStateException) {
+            } catch (e: IllegalStateException) {
+                AppLogger.e("AudioPlayer", "AudioTrack.play() failed", e)
                 track.release()
                 return
             }
@@ -103,12 +110,13 @@ class AudioPlayer(context: Context) {
             try {
                 track.write(buffer, 0, buffer.size)
             } catch (e: IllegalStateException) {
-                // Track released or stopped; ignore
+                AppLogger.e("AudioPlayer", "playPcm failed", e)
             }
         }
     }
 
     fun stop() {
+        AppLogger.d("AudioPlayer", "stop()")
         synchronized(lock) {
             audioTrack?.apply {
                 try { stop() } catch (_: IllegalStateException) {}

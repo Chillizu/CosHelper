@@ -21,11 +21,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.coshelper.utils.AppLogger
 
 @Composable
 fun AudioDevicePicker(
@@ -39,6 +41,25 @@ fun AudioDevicePicker(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        val onSelectLogged: (Int?) -> Unit = { id ->
+            AppLogger.d("AudioDevicePicker", "Selected: title=$title, id=${id ?: "default"}")
+            onSelect(id)
+        }
+
+        LaunchedEffect(devices) {
+            val sb = StringBuilder()
+            sb.append("Device list: title=$title, count=${devices.size}")
+            if (devices.isNotEmpty()) {
+                sb.append(" [")
+                devices.forEachIndexed { index, device ->
+                    if (index > 0) sb.append("; ")
+                    sb.append("id=${device.id}, type=${AppLogger.deviceTypeName(device.type)}, name=${device.productName}")
+                }
+                sb.append("]")
+            }
+            AppLogger.d("AudioDevicePicker", sb.toString())
+        }
+
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
@@ -55,7 +76,7 @@ fun AudioDevicePicker(
                 .heightIn(min = 48.dp)
                 .selectable(
                     selected = isDefaultSelected,
-                    onClick = { onSelect(null) },
+                    onClick = { onSelectLogged(null) },
                     role = Role.RadioButton
                 ),
             shape = RoundedCornerShape(8.dp),
@@ -103,7 +124,7 @@ fun AudioDevicePicker(
                     .heightIn(min = 48.dp)
                     .selectable(
                         selected = isSelected,
-                        onClick = { onSelect(deviceId) },
+                        onClick = { onSelectLogged(deviceId) },
                         role = Role.RadioButton
                     ),
                 shape = RoundedCornerShape(8.dp),

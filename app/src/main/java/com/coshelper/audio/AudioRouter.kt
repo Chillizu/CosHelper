@@ -3,6 +3,7 @@ package com.coshelper.audio
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import com.coshelper.utils.AppLogger
 
 class AudioRouter private constructor(context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -60,18 +61,35 @@ class AudioRouter private constructor(context: Context) {
     )
 
     fun getInputDevices(): List<AudioDeviceInfo> {
-        return audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
             .filter { it.type in inputTypePriority }
             .sortedBy { inputTypePriority.indexOf(it.type) }
+        val sb = StringBuilder("Input devices: ")
+        if (devices.isEmpty()) {
+            sb.append("none")
+        } else {
+            devices.joinTo(sb) { "[id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}, name=${it.productName}]" }
+        }
+        AppLogger.d("AudioRouter", sb.toString())
+        return devices
     }
 
     fun getOutputDevices(): List<AudioDeviceInfo> {
-        return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .filter { it.type in outputTypePriority }
             .sortedBy { outputTypePriority.indexOf(it.type) }
+        val sb = StringBuilder("Output devices: ")
+        if (devices.isEmpty()) {
+            sb.append("none")
+        } else {
+            devices.joinTo(sb) { "[id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}, name=${it.productName}]" }
+        }
+        AppLogger.d("AudioRouter", sb.toString())
+        return devices
     }
 
     fun setCommunicationMode(isCommunication: Boolean) {
+        AppLogger.d("AudioRouter", "setCommunicationMode($isCommunication)")
         if (isCommunication) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         } else {
@@ -79,6 +97,15 @@ class AudioRouter private constructor(context: Context) {
         }
     }
 
-    fun getDefaultInputDevice(): AudioDeviceInfo? = getInputDevices().firstOrNull()
-    fun getDefaultOutputDevice(): AudioDeviceInfo? = getOutputDevices().firstOrNull()
+    fun getDefaultInputDevice(): AudioDeviceInfo? {
+        val device = getInputDevices().firstOrNull()
+        AppLogger.d("AudioRouter", "Default input device: ${device?.let { "[id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}, name=${it.productName}]" } ?: "none"}")
+        return device
+    }
+
+    fun getDefaultOutputDevice(): AudioDeviceInfo? {
+        val device = getOutputDevices().firstOrNull()
+        AppLogger.d("AudioRouter", "Default output device: ${device?.let { "[id=${it.id}, type=${AppLogger.deviceTypeName(it.type)}, name=${it.productName}]" } ?: "none"}")
+        return device
+    }
 }

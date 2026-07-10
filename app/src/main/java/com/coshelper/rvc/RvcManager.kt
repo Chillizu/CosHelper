@@ -17,12 +17,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class RvcManager(context: Context) {
+class RvcManager private constructor(context: Context) {
+    companion object {
+        @Volatile
+        private var INSTANCE: RvcManager? = null
+
+        fun getInstance(context: Context): RvcManager {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: RvcManager(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
+
     private val appContext = context.applicationContext
     private val processor = RvcProcessor()
     private val recorder = AudioRecorder(appContext)
     private val player = AudioPlayer(appContext)
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _state = MutableStateFlow(RvcState.Idle)
     val state: StateFlow<RvcState> = _state.asStateFlow()
@@ -34,6 +45,12 @@ class RvcManager(context: Context) {
 
     private var inputDeviceId: Int? = null
     private var outputDeviceId: Int? = null
+
+    private fun ensureScope() {
+        if (!scope.isActive) {
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        }
+    }
 
     fun setInputDevice(deviceId: Int?) {
         inputDeviceId = deviceId
@@ -57,10 +74,12 @@ class RvcManager(context: Context) {
     }
 
     fun start() {
+        if (_state.value == RvcState.Running) return
         if (_state.value != RvcState.Loaded) {
             _info.value = "请先加载模型"
             return
         }
+        ensureScope()
         player.setCommunicationMode(false) // media channel
         player.setPreferredOutputDevice(outputDeviceId)
         _state.value = RvcState.Running

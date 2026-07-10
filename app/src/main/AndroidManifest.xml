@@ -66,6 +66,12 @@
             android:foregroundServiceType="microphone|connectedDevice" />
 
         <service
+            android:name=".rvc.RvcForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
             android:name=".ptt.PTTAccessibilityService"
             android:enabled="true"
             android:exported="true"

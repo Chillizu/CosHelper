@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -42,7 +40,7 @@ import com.coshelper.ui.components.StatusChip
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SttScreen(onBack: () -> Unit) {
+fun SttScreen() {
     val context = LocalContext.current
     val manager = remember { SttManager(context) }
     val audioRouter = remember { AudioRouter.getInstance(context) }
@@ -88,14 +86,6 @@ fun SttScreen(onBack: () -> Unit) {
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("语音转文字") },
-                navigationIcon = {
-                    androidx.compose.material3.IconButton(onClick = onBack) {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )

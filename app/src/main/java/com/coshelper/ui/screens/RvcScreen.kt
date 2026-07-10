@@ -2,6 +2,7 @@ package com.coshelper.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderOpen
@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
+import com.coshelper.rvc.RvcForegroundService
 import com.coshelper.rvc.RvcManager
 import com.coshelper.rvc.RvcState
 import com.coshelper.ui.components.AudioDevicePicker
@@ -55,9 +56,9 @@ import com.coshelper.ui.components.StatusChip
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RvcScreen(onBack: () -> Unit) {
+fun RvcScreen() {
     val context = LocalContext.current
-    val manager = remember { RvcManager(context) }
+    val manager = remember { RvcManager.getInstance(context) }
     val state by manager.state.collectAsState()
     val info by manager.info.collectAsState()
     val router = remember { AudioRouter.getInstance(context) }
@@ -136,11 +137,6 @@ fun RvcScreen(onBack: () -> Unit) {
         onDispose { }
     }
 
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose { manager.cleanup() }
-    }
-
     // Status mapping
     val statusIcon = when (state) {
         RvcState.Idle -> Icons.Default.Info
@@ -159,15 +155,7 @@ fun RvcScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("变声器") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                }
+                title = { Text("变声器") }
             )
         },
         bottomBar = {
@@ -189,7 +177,15 @@ fun RvcScreen(onBack: () -> Unit) {
                     BottomActionBar(
                         text = if (state == RvcState.Running) "停止实时变声" else "开始实时变声",
                         onClick = {
-                            if (state == RvcState.Running) manager.stop() else manager.start()
+                            if (state == RvcState.Running) {
+                                manager.stop()
+                                context.stopService(Intent(context, RvcForegroundService::class.java))
+                            } else {
+                                manager.setInputDevice(inputDeviceId)
+                                manager.setOutputDevice(outputDeviceId)
+                                manager.start()
+                                context.startForegroundService(Intent(context, RvcForegroundService::class.java))
+                            }
                         },
                         enabled = canStart
                     )

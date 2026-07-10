@@ -42,6 +42,13 @@ extern "C" {
 JNIEXPORT jint JNICALL
 Java_com_coshelper_audio_OpusCodec_nativeEncode(JNIEnv *env, jobject /*thiz*/, jshortArray samples, jint sampleCount, jbyteArray output, jint maxBytes) {
     if (!initEncoder()) return -1;
+    if (samples == nullptr || output == nullptr) return -1;
+    jsize sampleLen = env->GetArrayLength(samples);
+    jsize outputLen = env->GetArrayLength(output);
+    if (sampleCount < 0 || sampleCount > sampleLen || maxBytes < 0 || maxBytes > outputLen) {
+        LOGE("nativeEncode: invalid lengths sampleCount=%d/%d maxBytes=%d/%d", sampleCount, sampleLen, maxBytes, outputLen);
+        return -1;
+    }
     jshort *pcm = env->GetShortArrayElements(samples, nullptr);
     jbyte *data = env->GetByteArrayElements(output, nullptr);
     int len = opus_encode(g_encoder, pcm, sampleCount, reinterpret_cast<unsigned char *>(data), maxBytes);
@@ -56,6 +63,13 @@ Java_com_coshelper_audio_OpusCodec_nativeEncode(JNIEnv *env, jobject /*thiz*/, j
 JNIEXPORT jint JNICALL
 Java_com_coshelper_audio_OpusCodec_nativeDecode(JNIEnv *env, jobject /*thiz*/, jbyteArray data, jint dataLen, jshortArray output, jint sampleCount) {
     if (!initDecoder()) return -1;
+    if (data == nullptr || output == nullptr) return -1;
+    jsize dataArrayLen = env->GetArrayLength(data);
+    jsize outputArrayLen = env->GetArrayLength(output);
+    if (dataLen < 0 || dataLen > dataArrayLen || sampleCount < 0 || sampleCount > outputArrayLen) {
+        LOGE("nativeDecode: invalid lengths dataLen=%d/%d sampleCount=%d/%d", dataLen, dataArrayLen, sampleCount, outputArrayLen);
+        return -1;
+    }
     jbyte *in = env->GetByteArrayElements(data, nullptr);
     jshort *out = env->GetShortArrayElements(output, nullptr);
     int decoded = opus_decode(g_decoder, reinterpret_cast<const unsigned char *>(in), dataLen, out, sampleCount, 0);

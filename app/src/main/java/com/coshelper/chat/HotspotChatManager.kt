@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 import com.coshelper.audio.AudioPlayer
 import com.coshelper.audio.AudioRecorder
 import com.coshelper.audio.OpusCodec
+import com.coshelper.data.AudioSettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,17 +23,25 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.time.Duration.Companion.seconds
 
-class HotspotChatManager(context: Context) {
+class HotspotChatManager(
+    context: Context,
+    private val settingsRepo: AudioSettingsRepository = AudioSettingsRepository(context.applicationContext)
+) {
 
     private val appContext = context.applicationContext
     private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -59,15 +68,22 @@ class HotspotChatManager(context: Context) {
 
     private var serverSocket: ServerSocket? = null
     private val clientSockets = ConcurrentHashMap<String, Socket>()
+    private val connectMutex = Mutex()
     private val isPttActive = AtomicBoolean(false)
     private var isServer = false
+
+    private var inputDeviceId: Int? = null
+
+    fun setInputDevice(deviceId: Int?) {
+        inputDeviceId = deviceId
+    }
 
     private val nsdManager = appContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private var nsdRegistrationListener: NsdManager.RegistrationListener? = null
     private var nsdDiscoveryListener: NsdManager.DiscoveryListener? = null
 
     private val serviceType = "_coshelper._tcp"
-    private val serviceName = "CosHelper"
+    private val serviceName = "MioKig"
     private val port = 19999
     private var fallbackHost = "192.168.43.1"
 
@@ -123,10 +139,11 @@ class HotspotChatManager(context: Context) {
     }
 
     private fun connectClient(host: String, port: Int) {
-        if (_state.value !is HotspotState.ClientSearching) return
-        _status.value = "正在连接 $host:$port…"
         scope.launch {
+            if (!connectMutex.tryLock()) return@launch
             try {
+                if (_state.value !is HotspotState.ClientSearching) return@launch
+                _status.value = "正在连接 $host:$port…"
                 val socket = Socket()
                 socket.connect(InetSocketAddress(host, port), 5000)
                 val id = socket.inetAddress.hostAddress ?: host
@@ -134,11 +151,16 @@ class HotspotChatManager(context: Context) {
                 _state.value = HotspotState.ClientConnected(id)
                 _events.tryEmit(HotspotEvent.ConnectedToServer(id))
                 _status.value = "已连接"
+                fallbackJob?.cancel()
+                fallbackJob = null
+                nsdDiscoveryListener?.let { nsdManager.stopServiceDiscovery(it); nsdDiscoveryListener = null }
                 handleSocket(socket, id)
             } catch (e: IOException) {
                 _events.tryEmit(HotspotEvent.Error("Connect failed: ${e.message}"))
                 _status.value = "连接失败: ${e.message}"
                 _state.value = HotspotState.Idle
+            } finally {
+                connectMutex.unlock()
             }
         }
     }
@@ -155,22 +177,23 @@ class HotspotChatManager(context: Context) {
                     if (r < 0) throw IOException("EOF")
                     read += r
                 }
-                val buf = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
-                val frameType = buf.short.toInt() and 0xFFFF
-                // seq and timestamp are part of the protocol but not needed for playback
-                buf.short // sequence
-                buf.int // timestamp
-                val dataLen = buf.short.toInt() and 0xFFFF
-                if (frameType != 2 || dataLen > 4096) continue
-                val payload = ByteArray(dataLen)
+                val h = parseHeader(header)
+                if (h.dataLen > 4096) throw IOException("frame too large: ${h.dataLen}")
+                val payload = ByteArray(h.dataLen)
                 var pr = 0
-                while (pr < dataLen) {
-                    val r = input.read(payload, pr, dataLen - pr)
+                while (pr < h.dataLen) {
+                    val r = input.read(payload, pr, h.dataLen - pr)
                     if (r < 0) throw IOException("EOF")
                     pr += r
                 }
-                val fullFrame = header + payload
-                val pcm = codec.decode(fullFrame)
+                val decrypted = maybeDecryptFrame(h, payload)
+                if (decrypted == null) {
+                    if (h.frameType != ENCRYPTED_FRAME_TYPE) continue
+                    _events.tryEmit(HotspotEvent.Error("Failed to decrypt audio frame"))
+                    continue
+                }
+                val plainFrame = buildFrame(OpusCodec.FRAME_TYPE, h.seq, h.timestamp, decrypted)
+                val pcm = codec.decode(plainFrame)
                 pcm?.let { player.playPcm(it) }
             }
         } catch (_: IOException) {
@@ -286,7 +309,7 @@ class HotspotChatManager(context: Context) {
                 frame?.let { sendToAll(it) }
             }
         }
-        recorder.start()
+        recorder.start(inputDeviceId)
     }
 
     fun stopPtt() {
@@ -295,12 +318,90 @@ class HotspotChatManager(context: Context) {
     }
 
     private fun sendToAll(data: ByteArray) {
-        clientSockets.values.forEach { socket ->
+        val encrypted = maybeEncryptFrame(data)
+        clientSockets.toMap().forEach { (id, socket) ->
             try {
-                socket.getOutputStream().write(data)
+                socket.getOutputStream().write(encrypted)
             } catch (e: IOException) {
+                try { socket.close() } catch (_: Throwable) {}
+                clientSockets.remove(id)
                 _events.tryEmit(HotspotEvent.Error("Send failed: ${e.message}"))
             }
+        }
+    }
+
+    // ── Hotspot audio stream encryption (AES-256-GCM) ───────────────────────
+    private companion object Crypto {
+        private const val ENCRYPTED_FRAME_TYPE = 3
+        private const val GCM_TAG_BITS = 128
+        private const val IV_SIZE = 12
+    }
+
+    private fun deriveKey(): SecretKeySpec? {
+        val password = settingsRepo.getHotspotKey()
+        if (password.isBlank()) return null
+        val digest = MessageDigest.getInstance("SHA-256")
+        val keyBytes = digest.digest(password.toByteArray(Charsets.UTF_8))
+        return SecretKeySpec(keyBytes, "AES")
+    }
+
+    private fun buildIv(seq: Int, timestamp: Int, frameType: Int): ByteArray {
+        val iv = ByteArray(IV_SIZE)
+        val buf = ByteBuffer.wrap(iv).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(seq.toShort())
+        buf.putInt(timestamp)
+        buf.putShort(frameType.toShort())
+        return iv
+    }
+
+    private fun parseHeader(header: ByteArray): ParsedHeader {
+        val buf = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
+        val frameType = buf.short.toInt() and 0xFFFF
+        val seq = buf.short.toInt() and 0xFFFF
+        val timestamp = buf.int
+        val dataLen = buf.short.toInt() and 0xFFFF
+        return ParsedHeader(frameType, seq, timestamp, dataLen)
+    }
+
+    private data class ParsedHeader(
+        val frameType: Int,
+        val seq: Int,
+        val timestamp: Int,
+        val dataLen: Int
+    )
+
+    private fun buildFrame(frameType: Int, seq: Int, timestamp: Int, payload: ByteArray): ByteArray {
+        val frame = ByteArray(10 + payload.size)
+        val buf = ByteBuffer.wrap(frame).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(frameType.toShort())
+        buf.putShort(seq.toShort())
+        buf.putInt(timestamp)
+        buf.putShort(payload.size.toShort())
+        System.arraycopy(payload, 0, frame, 10, payload.size)
+        return frame
+    }
+
+    private fun maybeEncryptFrame(frame: ByteArray): ByteArray {
+        val key = deriveKey() ?: return frame
+        val header = parseHeader(frame.copyOfRange(0, 10))
+        val payload = frame.copyOfRange(10, 10 + header.dataLen)
+        val iv = buildIv(header.seq, header.timestamp, header.frameType)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        val cipherText = cipher.doFinal(payload)
+        return buildFrame(ENCRYPTED_FRAME_TYPE, header.seq, header.timestamp, cipherText)
+    }
+
+    private fun maybeDecryptFrame(header: ParsedHeader, payload: ByteArray): ByteArray? {
+        val key = deriveKey() ?: return if (header.frameType == OpusCodec.FRAME_TYPE) payload else null
+        if (header.frameType != ENCRYPTED_FRAME_TYPE) return null
+        val iv = buildIv(header.seq, header.timestamp, OpusCodec.FRAME_TYPE)
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+            cipher.doFinal(payload)
+        } catch (_: Exception) {
+            null
         }
     }
 

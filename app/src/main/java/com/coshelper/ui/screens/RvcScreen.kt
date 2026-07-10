@@ -1,42 +1,79 @@
 package com.coshelper.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.coshelper.audio.AudioRouter
+import com.coshelper.data.AudioSettingsRepository
+import androidx.compose.foundation.layout.imePadding
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.coshelper.rvc.RvcForegroundService
 import com.coshelper.rvc.RvcManager
 import com.coshelper.rvc.RvcState
+import com.coshelper.ui.components.AudioDevicePicker
+import com.coshelper.ui.components.BottomActionBar
+import com.coshelper.ui.components.StatusChip
+import com.coshelper.utils.copyModelUriToFilesDir
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RvcScreen(onBack: () -> Unit) {
+fun RvcScreen() {
     val context = LocalContext.current
-    val manager = remember { RvcManager(context) }
+    val manager = remember { RvcManager.getInstance(context) }
     val state by manager.state.collectAsState()
     val info by manager.info.collectAsState()
+    val router = remember { AudioRouter.getInstance(context) }
+    val settingsRepo = remember { AudioSettingsRepository(context) }
+
+    val scope = rememberCoroutineScope()
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -46,70 +83,212 @@ fun RvcScreen(onBack: () -> Unit) {
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         )
     }
-    val launcher = rememberLauncherForActivityResult(
+    val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { permissionGranted = it }
 
-    var modelPath by remember { mutableStateOf("/sdcard/Download/rvc_model.onnx") }
-
-    DisposableEffect(Unit) {
-        onDispose { manager.cleanup() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Button(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
-            Text("返回", fontSize = 20.sp)
+    // Model path (read from and written to AudioSettingsRepository)
+    var modelPath by remember { mutableStateOf(settingsRepo.getRvcModelPath()) }
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            copyModelUriToFilesDir(context, it, "rvc_model.onnx")?.let { dest ->
+                modelPath = dest.absolutePath
+                settingsRepo.setRvcModelPath(dest.absolutePath)
+                scope.launch(Dispatchers.IO) { manager.loadModel(dest.absolutePath) }
+            }
         }
+    }
 
-        Text("变声器", fontSize = 36.sp, color = MaterialTheme.colorScheme.onBackground)
+    // Audio device states — read from AudioSettingsRepository
+    var inputDevices by remember { mutableStateOf(router.getInputDevices()) }
+    var outputDevices by remember { mutableStateOf(router.getOutputDevices()) }
+    var inputDeviceId by remember {
+        mutableStateOf(settingsRepo.getInputDevice("rvc"))
+    }
+    var outputDeviceId by remember {
+        mutableStateOf(settingsRepo.getOutputDevice("rvc"))
+    }
 
-        Text(info, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
+    // Audio device callback for hotplug support
+    DisposableEffect(router) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                inputDevices = router.getInputDevices()
+                outputDevices = router.getOutputDevices()
+            }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "模型路径：$modelPath",
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                inputDevices = router.getInputDevices()
+                outputDevices = router.getOutputDevices()
+                val inputIds = inputDevices.map { it.id }
+                val outputIds = outputDevices.map { it.id }
+                if (inputDeviceId != null && inputDeviceId !in inputIds) {
+                    inputDeviceId = router.getDefaultInputDevice()?.id
+                    settingsRepo.setInputDevice("rvc", inputDeviceId)
+                }
+                if (outputDeviceId != null && outputDeviceId !in outputIds) {
+                    outputDeviceId = router.getDefaultOutputDevice()?.id
+                    settingsRepo.setOutputDevice("rvc", outputDeviceId)
+                }
+            }
+        }
+        audioManager.registerAudioDeviceCallback(callback, null)
+        onDispose { audioManager.unregisterAudioDeviceCallback(callback) }
+    }
+
+    // Propagate device IDs to RvcManager on change
+    LaunchedEffect(inputDeviceId) {
+        manager.setInputDevice(inputDeviceId)
+    }
+    LaunchedEffect(outputDeviceId) {
+        manager.setOutputDevice(outputDeviceId)
+    }
+
+    // Status mapping
+    val statusIcon = when (state) {
+        RvcState.Idle -> Icons.Default.Info
+        RvcState.Loaded -> Icons.Default.CheckCircle
+        RvcState.Running -> Icons.Default.Mic
+        RvcState.Error -> Icons.Default.Error
+    }
+    val statusIconDescription = when (state) {
+        RvcState.Idle -> "信息"
+        RvcState.Loaded -> "就绪"
+        RvcState.Running -> "实时变声"
+        RvcState.Error -> "错误"
+    }
+    val statusText = when (state) {
+        RvcState.Idle -> "未加载模型"
+        RvcState.Loaded -> "准备就绪"
+        RvcState.Running -> "实时变声中"
+        RvcState.Error -> info.ifEmpty { "未知错误" }
+    }
+    val canStart = state == RvcState.Loaded || state == RvcState.Running
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("变声器") }
             )
-            Button(onClick = {
-                // In real app, open file picker. For now, hard-coded path.
-                manager.loadModel(modelPath)
-            }) {
-                Text("加载", fontSize = 20.sp)
-            }
-        }
-
-        if (!permissionGranted) {
-            Button(onClick = { launcher.launch(Manifest.permission.RECORD_AUDIO) }) {
-                Text("授权录音权限", fontSize = 24.sp)
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("开启变声", fontSize = 28.sp, color = MaterialTheme.colorScheme.onBackground)
-                Switch(
-                    checked = state == RvcState.Running,
-                    onCheckedChange = { checked ->
-                        if (checked) manager.start() else manager.stop()
+        },
+        bottomBar = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (!permissionGranted) {
+                    Button(
+                        onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("授权录音权限")
                     }
-                )
+                } else {
+                    BottomActionBar(
+                        text = if (state == RvcState.Running) "停止实时变声" else "开始实时变声",
+                        onClick = {
+                            if (state == RvcState.Running) {
+                                manager.stop()
+                                context.stopService(Intent(context, RvcForegroundService::class.java))
+                            } else {
+                                manager.setInputDevice(inputDeviceId)
+                                manager.setOutputDevice(outputDeviceId)
+                                manager.start()
+                                context.startForegroundService(Intent(context, RvcForegroundService::class.java))
+                            }
+                        },
+                        enabled = canStart
+                    )
+                }
+                if (state != RvcState.Idle) {
+                    TextButton(onClick = { manager.unload() }) {
+                        Text("卸载模型")
+                    }
+                }
             }
         }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Status indicator
+            StatusChip(
+                icon = statusIcon,
+                iconContentDescription = statusIconDescription,
+                text = statusText,
+                modifier = Modifier.padding(top = 8.dp)
+            )
 
-        Button(onClick = { manager.unload() }) {
-            Text("卸载模型", fontSize = 24.sp)
+            // Model path with file picker and load action
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = modelPath.ifEmpty { "未选择模型" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                supportingContent = {
+                    Text("模型路径", style = MaterialTheme.typography.bodySmall)
+                },
+                leadingContent = {
+                    IconButton(onClick = {
+                        manager.loadModel(modelPath)
+                    }) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "加载模型")
+                    }
+                },
+                trailingContent = {
+                    IconButton(onClick = {
+                        filePickerLauncher.launch(arrayOf("*/*"))
+                    }) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = "选择模型文件")
+                    }
+                }
+            )
+
+            HorizontalDivider()
+
+            // Per-feature audio device pickers
+            AudioDevicePicker(
+                title = "输入设备",
+                devices = inputDevices,
+                selectedId = inputDeviceId,
+                onSelect = { id ->
+                    inputDeviceId = id
+                    settingsRepo.setInputDevice("rvc", id)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            AudioDevicePicker(
+                title = "输出设备",
+                devices = outputDevices,
+                selectedId = outputDeviceId,
+                onSelect = { id ->
+                    outputDeviceId = id
+                    settingsRepo.setOutputDevice("rvc", id)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

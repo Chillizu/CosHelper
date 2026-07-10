@@ -1,6 +1,7 @@
 package com.coshelper.audio
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFormat
@@ -40,7 +41,8 @@ class AudioRecorder(context: Context) {
         onPcmCallback = callback
     }
 
-    fun start(): Boolean {
+    fun start(): Boolean = start(null)
+    fun start(inputDeviceId: Int?): Boolean {
         if (ContextCompat.checkSelfPermission(
                 appContext,
                 Manifest.permission.RECORD_AUDIO
@@ -68,6 +70,14 @@ class AudioRecorder(context: Context) {
         if (record.state != AudioRecord.STATE_INITIALIZED) {
             record.release()
             return false
+        }
+
+        // Per-feature input device override takes precedence over global default
+        if (inputDeviceId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val device = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS)
+                .find { it.id == inputDeviceId }
+            device?.let { record.setPreferredDevice(it) }
         }
 
         audioRecord = record
@@ -122,6 +132,7 @@ class AudioRecorder(context: Context) {
         return true
     }
 
+    @SuppressLint("MissingPermission")
     private fun buildAudioRecord(bufferSize: Int): AudioRecord? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val builder = AudioRecord.Builder()
@@ -161,11 +172,6 @@ class AudioRecorder(context: Context) {
     fun stop() {
         recordingJob?.let { it.cancel() }
         recordingJob = null
-        audioRecord?.apply {
-            try { stop() } catch (_: IllegalStateException) {}
-            release()
-        }
-        audioRecord = null
         _isRecording.value = false
     }
 

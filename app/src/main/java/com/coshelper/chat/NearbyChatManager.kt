@@ -58,6 +58,12 @@ class NearbyChatManager(context: Context) {
     @Volatile
     private var isPttActive = false
 
+    private var inputDeviceId: Int? = null
+
+    fun setInputDevice(deviceId: Int?) {
+        inputDeviceId = deviceId
+    }
+
     private val serviceId = "com.coshelper.audio.v1"
 
     private val strategy = Strategy.P2P_POINT_TO_POINT
@@ -147,7 +153,7 @@ class NearbyChatManager(context: Context) {
     private fun startAdvertising() {
         val options = AdvertisingOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startAdvertising(
-            "CosHelper",
+            "MioKig",
             serviceId,
             connectionLifecycleCallback,
             options
@@ -177,7 +183,7 @@ class NearbyChatManager(context: Context) {
 
     private fun requestConnection(endpointId: String) {
         _state.value = ChatState.Connecting(endpointId, endpointId)
-        connectionsClient.requestConnection("CosHelper", endpointId, connectionLifecycleCallback)
+        connectionsClient.requestConnection("MioKig", endpointId, connectionLifecycleCallback)
     }
 
     fun startPtt() {
@@ -194,7 +200,7 @@ class NearbyChatManager(context: Context) {
                 frame?.let { sendToAll(it) }
             }
         }
-        recorder.start()
+        recorder.start(inputDeviceId)
     }
 
     fun stopPtt() {

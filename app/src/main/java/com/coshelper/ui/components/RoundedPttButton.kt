@@ -19,7 +19,7 @@ fun RoundedPttButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     activeText: String = "说话中",
-    inactiveText: String = "按住说话"
+    inactiveText: String = "按下说话"
 ) {
     Button(
         onClick = onClick,

@@ -60,11 +60,6 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".chat.ChatService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="microphone|connectedDevice" />
 
         <service
             android:name=".rvc.RvcForegroundService"

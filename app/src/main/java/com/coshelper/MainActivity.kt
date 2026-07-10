@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
             CosHelperTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.surface
                 ) {
                     MioKigNavHost()
                 }

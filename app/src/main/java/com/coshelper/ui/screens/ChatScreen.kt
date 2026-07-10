@@ -166,7 +166,7 @@ fun ChatScreen() {
                         onClick = { useHotspot = false },
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
                     ) {
-                        Text("Nearby")
+                        Text("附近")
                     }
                     SegmentedButton(
                         selected = useHotspot,

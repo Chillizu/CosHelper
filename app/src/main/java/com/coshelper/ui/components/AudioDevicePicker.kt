@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +52,7 @@ fun AudioDevicePicker(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .selectable(
                     selected = isDefaultSelected,
                     onClick = { onSelect(null) },
@@ -58,7 +60,7 @@ fun AudioDevicePicker(
                 ),
             shape = RoundedCornerShape(8.dp),
             color = if (isDefaultSelected) {
-                MaterialTheme.colorScheme.secondaryContainer
+                MaterialTheme.colorScheme.primaryContainer
             } else {
                 MaterialTheme.colorScheme.surface
             },
@@ -73,7 +75,7 @@ fun AudioDevicePicker(
                     contentDescription = if (isDefaultSelected) "已选择" else "未选择",
                     modifier = Modifier.size(20.dp),
                     tint = if (isDefaultSelected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
+                        MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     }
@@ -83,7 +85,7 @@ fun AudioDevicePicker(
                     text = "使用全局默认",
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isDefaultSelected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
+                        MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     }
@@ -98,6 +100,7 @@ fun AudioDevicePicker(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .selectable(
                         selected = isSelected,
                         onClick = { onSelect(deviceId) },

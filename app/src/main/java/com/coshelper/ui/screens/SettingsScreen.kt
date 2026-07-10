@@ -38,7 +38,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -280,7 +279,8 @@ fun SettingsScreen() {
                         OutlinedTextField(
                             value = draftKey,
                             onValueChange = { draftKey = it },
-                            label = { Text("共享密钥（两端需一致）") },
+                            label = { Text("共享密钥") },
+                            supportingText = { Text("两端需一致") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -390,8 +390,8 @@ fun SettingsScreen() {
 private fun SectionHeader(title: String) {
     Text(
         text = title,
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp, bottom = 4.dp)

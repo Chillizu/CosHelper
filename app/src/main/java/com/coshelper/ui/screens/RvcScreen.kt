@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import com.coshelper.audio.AudioRouter
 import com.coshelper.data.AudioSettingsRepository
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.material3.Surface
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.coshelper.rvc.RvcForegroundService
@@ -181,17 +181,13 @@ fun RvcScreen() {
             )
         },
         bottomBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 3.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                 if (!permissionGranted) {
                     Button(
                         onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
@@ -222,7 +218,6 @@ fun RvcScreen() {
                     }
                 }
             }
-        }
         }
     ) { padding ->
         Column(
@@ -258,7 +253,7 @@ fun RvcScreen() {
                     IconButton(onClick = {
                         manager.loadModel(modelPath)
                     }) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = "加载模型")
+                        Icon(Icons.Default.PlayArrow, contentDescription = "加载模型")
                     }
                 },
                 trailingContent = {

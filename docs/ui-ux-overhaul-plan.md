@@ -175,11 +175,15 @@ The reference screenshots use a **light M3 color scheme**. CosHelper currently u
 - [ ] Verify RVC load/start/stop lifecycle unchanged.
 - [ ] Verify device selection overrides are persisted.
 
-## 6. Open questions before starting implementation
+## 6. Decisions (confirmed by user)
 
-1. **Theme**: The reference screenshots are light. Do you want CosHelper to switch to a light theme, or keep the current dark theme while only adopting the rounded-rectangle shapes and layout?
-2. **Voice changer output**: Should the output device picker always be visible, or only when a wired/Bluetooth headset is connected? Default to global media output?
-3. **STT feedback**: STT has no audio output. Should it show only input device, or also a “播放反馈音” toggle?
+1. **Theme**: Follow the system light/dark setting. Use `isSystemInDarkTheme()` and provide both light and dark M3 color schemes, with dynamic colors on Android 12+ if available.
+2. **Voice changer output device picker**: Always visible.
+3. **STT feedback**: Add a recognition beep/tone on start and stop.
+
+## 7. Open questions before starting implementation
+
+None remaining. Proceed to implementation.
 
 Answers to these determine the final tokens and component choices.
 
